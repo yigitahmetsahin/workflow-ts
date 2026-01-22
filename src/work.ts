@@ -23,8 +23,7 @@ export class Work<
   TData = Record<string, unknown>,
   TResult = unknown,
   TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
-> implements IWorkDefinition<TName, TData, TResult, TAvailableWorkResults>
-{
+> implements IWorkDefinition<TName, TData, TResult, TAvailableWorkResults> {
   /** Unique name for the work */
   readonly name: TName;
 

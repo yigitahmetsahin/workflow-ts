@@ -74,9 +74,7 @@ const fetchOrders = new Work({
   execute: async (ctx) => [{ id: 1 }, { id: 2 }],
 });
 
-const workflow2 = new Workflow<{ userId: string }>()
-  .serial(validateUser)
-  .parallel([fetchOrders]);
+const workflow2 = new Workflow<{ userId: string }>().serial(validateUser).parallel([fetchOrders]);
 
 const result = await workflow.run({ userId: 'user-123' });
 

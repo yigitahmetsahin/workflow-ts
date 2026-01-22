@@ -103,9 +103,12 @@ export class Workflow<
   ): Workflow<TData, TWorkResults & ParallelWorksToRecord<TParallelWorks>> {
     this.works.push({
       type: 'parallel',
-      works: works.map((w) =>
-        getWorkDefinition(w)
-      ) as unknown as IWorkDefinition<string, TData, unknown, TWorkResults>[],
+      works: works.map((w) => getWorkDefinition(w)) as unknown as IWorkDefinition<
+        string,
+        TData,
+        unknown,
+        TWorkResults
+      >[],
     });
     return this as unknown as Workflow<TData, TWorkResults & ParallelWorksToRecord<TParallelWorks>>;
   }

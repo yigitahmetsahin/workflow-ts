@@ -140,7 +140,7 @@ When making code changes, **ALWAYS keep the following up to date**:
    - Add tests for new features or bug fixes
    - Update existing tests when API changes
 
-2. **Documentation** 
+2. **Documentation**
    - `README.md` - User-facing documentation and API examples
    - `AGENTS.md` - Developer/agent instructions and key types
    - `examples/README.md` - Examples overview
