@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [2.2.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v2.1.0...v2.2.0) (2026-01-22)
+
+
+### Features
+
+* add getAny() for non-chained workflow building ([96d717b](https://github.com/yigitahmetsahin/workflow-ts/commit/96d717b247aeb4a0aa18924febb9b65051da54af))
+* add WorkGroup for dynamic parallel work building ([8220c7c](https://github.com/yigitahmetsahin/workflow-ts/commit/8220c7c72f3c44bbaee247b966b6000052ecc437))
+
+
+### Bug Fixes
+
+* use chained workflow methods to preserve type inference ([090f702](https://github.com/yigitahmetsahin/workflow-ts/commit/090f7025bb0397025a5d4327de83ef11dbc8f830))
+
 ## [2.1.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v2.0.0...v2.1.0) (2026-01-22)
 
 
