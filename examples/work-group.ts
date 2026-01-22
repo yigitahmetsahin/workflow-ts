@@ -130,23 +130,24 @@ async function main() {
     },
   });
 
-  // Note: Methods must be chained to preserve type inference for work names
-  const mixedWorkflow = new Workflow<UserContext>()
-    .parallel([
-      { name: 'arrayWork1', execute: async () => 'from array 1' },
-      { name: 'arrayWork2', execute: async () => 'from array 2' },
-    ])
-    .parallel(additionalGroup)
-    .serial({
-      name: 'summarize',
-      execute: async (ctx) => {
-        return {
-          fromArray1: ctx.workResults.get('arrayWork1').result,
-          fromArray2: ctx.workResults.get('arrayWork2').result,
-          fromGroup: ctx.workResults.get('groupWork').result,
-        };
-      },
-    });
+  // Non-chained building: use getAny() for runtime-safe access without compile-time types
+  const mixedWorkflow = new Workflow<UserContext>();
+  mixedWorkflow.parallel([
+    { name: 'arrayWork1', execute: async () => 'from array 1' },
+    { name: 'arrayWork2', execute: async () => 'from array 2' },
+  ]);
+  mixedWorkflow.parallel(additionalGroup);
+  mixedWorkflow.serial({
+    name: 'summarize',
+    execute: async (ctx) => {
+      // Use getAny() for non-chained workflows - returns IWorkResult<unknown>
+      return {
+        fromArray1: ctx.workResults.getAny('arrayWork1').result,
+        fromArray2: ctx.workResults.getAny('arrayWork2').result,
+        fromGroup: ctx.workResults.getAny('groupWork').result,
+      };
+    },
+  });
 
   const mixedResult = await mixedWorkflow.run({
     userId: 'user-456',

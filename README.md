@@ -248,6 +248,49 @@ group.isEmpty(); // Check if group has no works
 group.length; // Get the number of works in the group
 ```
 
+### Chained vs Non-Chained Building
+
+**Chained building** (recommended) provides full type inference:
+
+```typescript
+// ✅ Full type inference - get() knows all work names and types
+const workflow = new Workflow<MyData>()
+  .serial({ name: 'step1', execute: async () => 'result1' })
+  .serial({
+    name: 'step2',
+    execute: async (ctx) => {
+      const r = ctx.workResults.get('step1').result; // ✅ Typed as string
+      return r;
+    },
+  });
+```
+
+**Non-chained building** is useful for conditional steps but loses compile-time type inference. Use `getAny()` for runtime-safe access:
+
+```typescript
+// Non-chained: use getAny() instead of get()
+const workflow = new Workflow<MyData>();
+workflow.serial({ name: 'step1', execute: async () => 'result1' });
+
+if (condition) {
+  workflow.serial({ name: 'conditionalStep', execute: async () => 123 });
+}
+
+workflow.serial({
+  name: 'final',
+  execute: async (ctx) => {
+    // Use getAny() - returns IWorkResult<unknown>
+    const r1 = ctx.workResults.getAny('step1').result;
+
+    // Check before accessing conditional results
+    if (ctx.workResults.has('conditionalStep')) {
+      const r2 = ctx.workResults.getAny('conditionalStep').result;
+    }
+    return 'done';
+  },
+});
+```
+
 ### `.run(initialData)`
 
 Execute the workflow with initial data.

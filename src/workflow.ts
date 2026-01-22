@@ -28,12 +28,20 @@ class WorkResultsMap<
     return result as IWorkResult<TWorkResults[K]>;
   }
 
+  getAny(name: string): IWorkResult<unknown> {
+    const result = this.map.get(name as keyof TWorkResults);
+    if (!result) {
+      throw new Error(`Work result "${name}" not found. This work may not have executed yet.`);
+    }
+    return result;
+  }
+
   set<K extends keyof TWorkResults>(name: K, value: IWorkResult<TWorkResults[K]>): void {
     this.map.set(name, value);
   }
 
-  has(name: keyof TWorkResults): boolean {
-    return this.map.has(name);
+  has(name: string): boolean {
+    return this.map.has(name as keyof TWorkResults);
   }
 }
 

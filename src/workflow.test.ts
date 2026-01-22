@@ -428,8 +428,40 @@ describe('Workflow', () => {
       const result = await workflow.run({});
 
       expect(result.context.workResults.has('exists')).toBe(true);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect(result.context.workResults.has('notExists' as any)).toBe(false);
+      expect(result.context.workResults.has('notExists')).toBe(false);
+    });
+
+    it('should support getAny() for non-chained workflow building', async () => {
+      // Non-chained building loses type inference but works at runtime
+      const workflow = new Workflow<{ value: number }>();
+      workflow.serial({ name: 'double', execute: async (ctx) => ctx.data.value * 2 });
+      workflow.serial({
+        name: 'useResult',
+        execute: async (ctx) => {
+          // getAny() works without compile-time type checking
+          const doubleResult = ctx.workResults.getAny('double');
+          return (doubleResult.result as number) + 1;
+        },
+      });
+
+      const result = await workflow.run({ value: 5 });
+
+      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.context.workResults.getAny('double').result).toBe(10);
+      expect(result.context.workResults.getAny('useResult').result).toBe(11);
+    });
+
+    it('should throw error when getAny() called for non-existent work', async () => {
+      const workflow = new Workflow().serial({
+        name: 'exists',
+        execute: async () => 'value',
+      });
+
+      const result = await workflow.run({});
+
+      expect(() => result.context.workResults.getAny('notExists')).toThrow(
+        'Work result "notExists" not found'
+      );
     });
 
     it('should allow setting and getting results', async () => {
