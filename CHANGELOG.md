@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [1.2.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v1.1.1...v1.2.0) (2026-01-22)
+
+
+### Features
+
+* add ESLint and Prettier ([7b88fa5](https://github.com/yigitahmetsahin/workflow-ts/commit/7b88fa57ca54f4b90ac7fe482c28d49cd14e70a4))
+
 ## [1.1.1](https://github.com/yigitahmetsahin/workflow-ts/compare/v1.1.0...v1.1.1) (2026-01-22)
 
 
