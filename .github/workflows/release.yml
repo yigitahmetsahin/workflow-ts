@@ -1,4 +1,4 @@
-name: Release to npm
+name: Release
 
 on:
   push:
@@ -7,61 +7,43 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
   id-token: write
 
 jobs:
-  release:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          release-type: node
+
+  publish:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Check if version changed
-        id: version
-        run: |
-          NEW_VERSION=$(node -p "require('./package.json').version")
-          git show HEAD~1:package.json > /tmp/old-package.json 2>/dev/null || echo '{"version":"0.0.0"}' > /tmp/old-package.json
-          OLD_VERSION=$(node -p "require('/tmp/old-package.json').version")
-          echo "old=$OLD_VERSION" >> $GITHUB_OUTPUT
-          echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
-          if [ "$NEW_VERSION" != "$OLD_VERSION" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-            echo "Version changed: $OLD_VERSION -> $NEW_VERSION"
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "Version unchanged: $NEW_VERSION"
-          fi
-
-      - name: Create and push tag
-        if: steps.version.outputs.changed == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${{ steps.version.outputs.new }}" -m "Release v${{ steps.version.outputs.new }}"
-          git push origin "v${{ steps.version.outputs.new }}"
 
       - uses: actions/setup-node@v4
-        if: steps.version.outputs.changed == 'true'
         with:
           node-version: '24'
 
       - name: Update npm for OIDC support
-        if: steps.version.outputs.changed == 'true'
         run: npm install -g npm@latest
 
       - name: Install dependencies
-        if: steps.version.outputs.changed == 'true'
         run: npm ci
 
       - name: Run tests
-        if: steps.version.outputs.changed == 'true'
         run: npm test --if-present
 
       - name: Build
-        if: steps.version.outputs.changed == 'true'
         run: npm run build --if-present
 
       - name: Publish to npm with OIDC provenance
-        if: steps.version.outputs.changed == 'true'
         run: npm publish --provenance --access public
