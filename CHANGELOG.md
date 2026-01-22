@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [1.2.1](https://github.com/yigitahmetsahin/workflow-ts/compare/v1.2.0...v1.2.1) (2026-01-22)
+
+
+### Bug Fixes
+
+* correct examples to use relative imports and proper API ([4125ee0](https://github.com/yigitahmetsahin/workflow-ts/commit/4125ee03acc9d14c416478071d183f79454461b3))
+* suppress necessary any type warnings with eslint comments ([acd8f72](https://github.com/yigitahmetsahin/workflow-ts/commit/acd8f7292e6d05c0b8a1ab9701b9847ac246edaf))
+
 ## [1.2.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v1.1.1...v1.2.0) (2026-01-22)
 
 
