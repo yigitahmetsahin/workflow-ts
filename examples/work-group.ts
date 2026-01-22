@@ -130,13 +130,12 @@ async function main() {
     },
   });
 
+  // Note: Methods must be chained to preserve type inference for work names
   const mixedWorkflow = new Workflow<UserContext>()
-    // Array syntax
     .parallel([
       { name: 'arrayWork1', execute: async () => 'from array 1' },
       { name: 'arrayWork2', execute: async () => 'from array 2' },
     ])
-    // WorkGroup syntax
     .parallel(additionalGroup)
     .serial({
       name: 'summarize',
