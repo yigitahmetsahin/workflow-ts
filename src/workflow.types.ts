@@ -40,8 +40,8 @@ export interface IWorkflowContext<
 export interface IWorkResultsMap<
   TWorkResults extends Record<string, unknown> = Record<string, unknown>,
 > {
-  get<K extends keyof TWorkResults>(name: K): TWorkResults[K] | undefined;
-  set<K extends keyof TWorkResults>(name: K, value: TWorkResults[K]): void;
+  get<K extends keyof TWorkResults>(name: K): IWorkResult<TWorkResults[K]>;
+  set<K extends keyof TWorkResults>(name: K, value: IWorkResult<TWorkResults[K]>): void;
   has(name: keyof TWorkResults): boolean;
 }
 

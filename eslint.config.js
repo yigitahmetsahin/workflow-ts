@@ -10,7 +10,7 @@ export default tseslint.config(
     ignores: ['dist/**', 'node_modules/**', '*.config.js', '*.config.ts'],
   },
   {
-    files: ['src/**/*.ts'],
+    files: ['src/**/*.ts', 'examples/**/*.ts'],
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/explicit-function-return-type': 'off',

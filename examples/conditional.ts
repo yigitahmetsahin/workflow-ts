@@ -27,7 +27,7 @@ async function main() {
       name: 'sendEmailNotification',
       shouldRun: (ctx) => ctx.data.sendEmail,
       execute: async (ctx) => {
-        const prefs = ctx.workResults.get('fetchUserPreferences');
+        const prefs = ctx.workResults.get('fetchUserPreferences').result;
         console.log(`📧 Sending email to: ${prefs?.email}`);
         await new Promise((r) => setTimeout(r, 100));
         return { type: 'email', sent: true };
@@ -37,7 +37,7 @@ async function main() {
       name: 'sendSmsNotification',
       shouldRun: (ctx) => ctx.data.sendSms,
       execute: async (ctx) => {
-        const prefs = ctx.workResults.get('fetchUserPreferences');
+        const prefs = ctx.workResults.get('fetchUserPreferences').result;
         console.log(`📱 Sending SMS to: ${prefs?.phone}`);
         await new Promise((r) => setTimeout(r, 100));
         return { type: 'sms', sent: true };
@@ -47,7 +47,7 @@ async function main() {
       name: 'sendPushNotification',
       shouldRun: (ctx) => ctx.data.sendPush,
       execute: async (ctx) => {
-        const prefs = ctx.workResults.get('fetchUserPreferences');
+        const prefs = ctx.workResults.get('fetchUserPreferences').result;
         console.log(`🔔 Sending push to device: ${prefs?.deviceToken}`);
         await new Promise((r) => setTimeout(r, 100));
         return { type: 'push', sent: true };
@@ -57,9 +57,9 @@ async function main() {
       name: 'logNotifications',
       execute: async (ctx) => {
         const sent: string[] = [];
-        if (ctx.workResults.get('sendEmailNotification')) sent.push('email');
-        if (ctx.workResults.get('sendSmsNotification')) sent.push('sms');
-        if (ctx.workResults.get('sendPushNotification')) sent.push('push');
+        if (ctx.workResults.get('sendEmailNotification').result) sent.push('email');
+        if (ctx.workResults.get('sendSmsNotification').result) sent.push('sms');
+        if (ctx.workResults.get('sendPushNotification').result) sent.push('push');
         return { notificationsSent: sent };
       },
     });
@@ -71,7 +71,7 @@ async function main() {
     sendSms: false,
     sendPush: false,
   });
-  console.log('Result:', result.context.workResults.get('logNotifications'));
+  console.log('Result:', result.context.workResults.get('logNotifications').result);
 
   console.log('\n=== Scenario 2: All notifications ===\n');
   result = await workflow.run({
@@ -80,7 +80,7 @@ async function main() {
     sendSms: true,
     sendPush: true,
   });
-  console.log('Result:', result.context.workResults.get('logNotifications'));
+  console.log('Result:', result.context.workResults.get('logNotifications').result);
 
   console.log('\n=== Scenario 3: No notifications ===\n');
   result = await workflow.run({
@@ -89,7 +89,7 @@ async function main() {
     sendSms: false,
     sendPush: false,
   });
-  console.log('Result:', result.context.workResults.get('logNotifications'));
+  console.log('Result:', result.context.workResults.get('logNotifications').result);
 }
 
 main().catch(console.error);

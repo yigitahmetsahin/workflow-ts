@@ -21,7 +21,7 @@ async function main() {
     .serial({
       name: 'sendWelcomeEmail',
       execute: async (ctx) => {
-        const user = ctx.workResults.get('fetchUser');
+        const user = ctx.workResults.get('fetchUser').result;
         console.log(`Sending welcome email to: ${user?.email}`);
         await new Promise((r) => setTimeout(r, 50));
         return { sent: true, timestamp: new Date().toISOString() };
@@ -34,8 +34,8 @@ async function main() {
     console.log('\n✅ Workflow completed!');
     console.log(`Total duration: ${result.totalDuration}ms`);
     console.log('Results:', {
-      user: result.context.workResults.get('fetchUser'),
-      email: result.context.workResults.get('sendWelcomeEmail'),
+      user: result.context.workResults.get('fetchUser').result,
+      email: result.context.workResults.get('sendWelcomeEmail').result,
     });
   }
 }

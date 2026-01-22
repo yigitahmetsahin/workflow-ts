@@ -45,7 +45,7 @@ async function main() {
     .serial({
       name: 'sendReceipt',
       execute: async (ctx) => {
-        const payment = ctx.workResults.get('processPayment');
+        const payment = ctx.workResults.get('processPayment').result;
         console.log(`Sending receipt for transaction: ${payment?.transactionId}`);
         return { receiptSent: true };
       },
@@ -57,7 +57,7 @@ async function main() {
 
   if (result.status === WorkflowStatus.COMPLETED) {
     console.log('\n✅ Payment successful!');
-    console.log('Transaction:', result.context.workResults.get('processPayment'));
+    console.log('Transaction:', result.context.workResults.get('processPayment').result);
   } else {
     console.log('\n❌ Payment failed:', result.error?.message);
   }

@@ -48,9 +48,9 @@ async function main() {
     .serial({
       name: 'processOrder',
       execute: async (ctx) => {
-        const user = ctx.workResults.get('fetchUserProfile');
-        const inventory = ctx.workResults.get('fetchInventory');
-        const shipping = ctx.workResults.get('calculateShipping');
+        const user = ctx.workResults.get('fetchUserProfile').result;
+        const inventory = ctx.workResults.get('fetchInventory').result;
+        const shipping = ctx.workResults.get('calculateShipping').result;
 
         console.log('\nProcessing order with:');
         console.log(`  User: ${user?.name} (${user?.tier})`);
@@ -72,7 +72,7 @@ async function main() {
     console.log('\n✅ Order processed!');
     console.log(`Total duration: ${result.totalDuration}ms`);
     console.log(`(Parallel tasks saved ~${200 + 150 + 100 - 200}ms by running concurrently)`);
-    console.log('\nFinal result:', result.context.workResults.get('processOrder'));
+    console.log('\nFinal result:', result.context.workResults.get('processOrder').result);
   }
 }
 

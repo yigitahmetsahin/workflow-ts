@@ -13,7 +13,8 @@ describe('Workflow', () => {
       const result = await workflow.run({ value: 5 });
 
       expect(result.status).toBe(WorkflowStatus.COMPLETED);
-      expect(result.context.workResults.get('double')).toBe(10);
+      expect(result.context.workResults.get('double')?.result).toBe(10);
+      expect(result.context.workResults.get('double')?.status).toBe(WorkStatus.COMPLETED);
       expect(result.workResults.get('double')?.status).toBe(WorkStatus.COMPLETED);
       expect(result.workResults.get('double')?.result).toBe(10);
     });
@@ -33,7 +34,7 @@ describe('Workflow', () => {
           name: 'second',
           execute: async (ctx) => {
             executionOrder.push('second');
-            const firstResult = ctx.workResults.get('first')!;
+            const firstResult = ctx.workResults.get('first')!.result!;
             return firstResult + 1;
           },
         })
@@ -41,7 +42,7 @@ describe('Workflow', () => {
           name: 'third',
           execute: async (ctx) => {
             executionOrder.push('third');
-            const secondResult = ctx.workResults.get('second')!;
+            const secondResult = ctx.workResults.get('second')!.result!;
             return secondResult + 1;
           },
         });
@@ -50,9 +51,9 @@ describe('Workflow', () => {
 
       expect(result.status).toBe(WorkflowStatus.COMPLETED);
       expect(executionOrder).toEqual(['first', 'second', 'third']);
-      expect(result.context.workResults.get('first')).toBe(1);
-      expect(result.context.workResults.get('second')).toBe(2);
-      expect(result.context.workResults.get('third')).toBe(3);
+      expect(result.context.workResults.get('first')?.result).toBe(1);
+      expect(result.context.workResults.get('second')?.result).toBe(2);
+      expect(result.context.workResults.get('third')?.result).toBe(3);
     });
 
     it('should pass context data to serial works', async () => {
@@ -63,7 +64,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ name: 'Alice', age: 30 });
 
-      expect(result.context.workResults.get('createGreeting')).toBe(
+      expect(result.context.workResults.get('createGreeting')?.result).toBe(
         'Hello, Alice! You are 30 years old.'
       );
     });
@@ -101,9 +102,9 @@ describe('Workflow', () => {
       const duration = Date.now() - startTime;
 
       expect(result.status).toBe(WorkflowStatus.COMPLETED);
-      expect(result.context.workResults.get('task1')).toBe(10);
-      expect(result.context.workResults.get('task2')).toBe(20);
-      expect(result.context.workResults.get('task3')).toBe(30);
+      expect(result.context.workResults.get('task1')?.result).toBe(10);
+      expect(result.context.workResults.get('task2')?.result).toBe(20);
+      expect(result.context.workResults.get('task3')?.result).toBe(30);
       // Should run in parallel, so total time should be ~50ms, not 150ms
       expect(duration).toBeLessThan(120);
     });
@@ -123,15 +124,15 @@ describe('Workflow', () => {
         .serial({
           name: 'combine',
           execute: async (ctx) => {
-            const addResult = ctx.workResults.get('add')!;
-            const multiplyResult = ctx.workResults.get('multiply')!;
+            const addResult = ctx.workResults.get('add')!.result!;
+            const multiplyResult = ctx.workResults.get('multiply')!.result!;
             return { sum: addResult, product: multiplyResult };
           },
         });
 
       const result = await workflow.run({ base: 5 });
 
-      expect(result.context.workResults.get('combine')).toEqual({
+      expect(result.context.workResults.get('combine')?.result).toEqual({
         sum: 15,
         product: 50,
       });
@@ -153,7 +154,8 @@ describe('Workflow', () => {
       expect(result.status).toBe(WorkflowStatus.COMPLETED);
       expect(executeFn).not.toHaveBeenCalled();
       expect(result.workResults.get('conditional')?.status).toBe(WorkStatus.SKIPPED);
-      expect(result.context.workResults.get('conditional')).toBeUndefined();
+      expect(result.context.workResults.get('conditional').status).toBe(WorkStatus.SKIPPED);
+      expect(result.context.workResults.get('conditional').result).toBeUndefined();
     });
 
     it('should execute work when shouldRun returns true', async () => {
@@ -206,7 +208,7 @@ describe('Workflow', () => {
 
       expect(result.workResults.get('first')?.status).toBe(WorkStatus.SKIPPED);
       expect(result.workResults.get('second')?.status).toBe(WorkStatus.COMPLETED);
-      expect(result.context.workResults.get('second')).toBe('second result');
+      expect(result.context.workResults.get('second')?.result).toBe('second result');
     });
   });
 
@@ -373,8 +375,8 @@ describe('Workflow', () => {
         .serial({
           name: 'sum',
           execute: async (ctx) => {
-            const doubled = ctx.workResults.get('double')!;
-            const tripled = ctx.workResults.get('triple')!;
+            const doubled = ctx.workResults.get('double')!.result!;
+            const tripled = ctx.workResults.get('triple')!.result!;
             return doubled + tripled;
           },
         });
@@ -382,10 +384,10 @@ describe('Workflow', () => {
       const result = await workflow.run({ input: 10 });
 
       expect(result.status).toBe(WorkflowStatus.COMPLETED);
-      expect(result.context.workResults.get('validate')).toBe(true);
-      expect(result.context.workResults.get('double')).toBe(20);
-      expect(result.context.workResults.get('triple')).toBe(30);
-      expect(result.context.workResults.get('sum')).toBe(50);
+      expect(result.context.workResults.get('validate')?.result).toBe(true);
+      expect(result.context.workResults.get('double')?.result).toBe(20);
+      expect(result.context.workResults.get('triple')?.result).toBe(30);
+      expect(result.context.workResults.get('sum')?.result).toBe(50);
     });
 
     it('should support returning complex objects', async () => {
@@ -406,7 +408,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ userId: 'user-123' });
 
-      const user = result.context.workResults.get('fetchUser');
+      const user = result.context.workResults.get('fetchUser')?.result;
       expect(user).toEqual({
         id: 'user-123',
         name: 'Test User',
@@ -438,16 +440,20 @@ describe('Workflow', () => {
         .serial({
           name: 'second',
           execute: async (ctx) => {
-            // Manually set a value
-            ctx.workResults.set('first', 'modified value');
-            return ctx.workResults.get('first');
+            // Manually set a value (must provide IWorkResult)
+            ctx.workResults.set('first', {
+              status: WorkStatus.COMPLETED,
+              result: 'modified value',
+              duration: 0,
+            });
+            return ctx.workResults.get('first')?.result;
           },
         });
 
       const result = await workflow.run({});
 
-      expect(result.context.workResults.get('first')).toBe('modified value');
-      expect(result.context.workResults.get('second')).toBe('modified value');
+      expect(result.context.workResults.get('first')?.result).toBe('modified value');
+      expect(result.context.workResults.get('second')?.result).toBe('modified value');
     });
   });
 });

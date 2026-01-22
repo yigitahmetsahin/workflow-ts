@@ -15,13 +15,17 @@ import {
 class WorkResultsMap<
   TWorkResults extends Record<string, unknown>,
 > implements IWorkResultsMap<TWorkResults> {
-  private map = new Map<keyof TWorkResults, unknown>();
+  private map = new Map<keyof TWorkResults, IWorkResult<unknown>>();
 
-  get<K extends keyof TWorkResults>(name: K): TWorkResults[K] | undefined {
-    return this.map.get(name) as TWorkResults[K] | undefined;
+  get<K extends keyof TWorkResults>(name: K): IWorkResult<TWorkResults[K]> {
+    const result = this.map.get(name);
+    if (!result) {
+      throw new Error(`Work result "${String(name)}" not found. This work may not have executed yet.`);
+    }
+    return result as IWorkResult<TWorkResults[K]>;
   }
 
-  set<K extends keyof TWorkResults>(name: K, value: TWorkResults[K]): void {
+  set<K extends keyof TWorkResults>(name: K, value: IWorkResult<TWorkResults[K]>): void {
     this.map.set(name, value);
   }
 
@@ -55,9 +59,9 @@ class WorkResultsMap<
  *     name: 'process',
  *     execute: async (ctx) => {
  *       // ✅ Autocomplete for names AND types are inferred!
- *       const isValid = ctx.workResults.get('validate');     // boolean | undefined
- *       const orders = ctx.workResults.get('fetchOrders');   // Order[] | undefined
- *       const profile = ctx.workResults.get('fetchProfile'); // Profile | undefined
+ *       const isValid = ctx.workResults.get('validate').result;     // boolean | undefined
+ *       const orders = ctx.workResults.get('fetchOrders').result;   // Order[] | undefined
+ *       const profile = ctx.workResults.get('fetchProfile').result; // Profile | undefined
  *       return { orders, profile };
  *     },
  *   });
@@ -151,10 +155,13 @@ export class Workflow<
     if (work.shouldRun) {
       const shouldRun = await work.shouldRun(context);
       if (!shouldRun) {
-        workResults.set(work.name as keyof TWorkResults, {
+        const skippedResult: IWorkResult = {
           status: WorkStatus.SKIPPED,
           duration: Date.now() - workStartTime,
-        });
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        context.workResults.set(work.name as keyof TWorkResults, skippedResult as any);
+        workResults.set(work.name as keyof TWorkResults, skippedResult);
         return;
       }
     }
@@ -162,14 +169,16 @@ export class Workflow<
     try {
       const result = await work.execute(context);
 
-      // Store result in context for subsequent works
-      context.workResults.set(work.name as keyof TWorkResults, result);
-
-      workResults.set(work.name as keyof TWorkResults, {
+      const workResult: IWorkResult = {
         status: WorkStatus.COMPLETED,
         result,
         duration: Date.now() - workStartTime,
-      });
+      };
+
+      // Store result in context for subsequent works
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      context.workResults.set(work.name as keyof TWorkResults, workResult as any);
+      workResults.set(work.name as keyof TWorkResults, workResult);
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
 
@@ -205,10 +214,13 @@ export class Workflow<
       if (work.shouldRun) {
         const shouldRun = await work.shouldRun(context);
         if (!shouldRun) {
-          workResults.set(work.name as keyof TWorkResults, {
+          const skippedResult: IWorkResult = {
             status: WorkStatus.SKIPPED,
             duration: Date.now() - workStartTime,
-          });
+          };
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          context.workResults.set(work.name as keyof TWorkResults, skippedResult as any);
+          workResults.set(work.name as keyof TWorkResults, skippedResult);
           return { work, skipped: true };
         }
       }
@@ -236,19 +248,22 @@ export class Workflow<
       const duration = Date.now() - result.startTime!;
 
       if ('error' in result && result.error) {
-        workResults.set(result.work.name as keyof TWorkResults, {
+        const workResult: IWorkResult = {
           status: WorkStatus.FAILED,
           error: result.error,
           duration,
-        });
+        };
+        workResults.set(result.work.name as keyof TWorkResults, workResult);
         errors.push({ work: result.work, error: result.error });
       } else {
-        context.workResults.set(result.work.name as keyof TWorkResults, result.result);
-        workResults.set(result.work.name as keyof TWorkResults, {
+        const workResult: IWorkResult = {
           status: WorkStatus.COMPLETED,
           result: result.result,
           duration,
-        });
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        context.workResults.set(result.work.name as keyof TWorkResults, workResult as any);
+        workResults.set(result.work.name as keyof TWorkResults, workResult);
       }
     }
 
