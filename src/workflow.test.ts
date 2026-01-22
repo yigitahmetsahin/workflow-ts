@@ -602,4 +602,126 @@ describe('Workflow', () => {
       expect(result2.context.workResults.get('shared')?.result).toBe(20);
     });
   });
+
+  describe('silenceError', () => {
+    it('should continue workflow when serial work with silenceError fails', async () => {
+      const workflow = new Workflow<{ value: number }>()
+        .serial({ name: 'first', execute: async (ctx) => ctx.data.value })
+        .serial({
+          name: 'failing',
+          execute: async () => {
+            throw new Error('Silent failure');
+          },
+          silenceError: true,
+        })
+        .serial({
+          name: 'last',
+          execute: async () => 'completed',
+        });
+
+      const result = await workflow.run({ value: 5 });
+
+      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.context.workResults.get('first')?.result).toBe(5);
+      expect(result.context.workResults.get('failing')?.status).toBe(WorkStatus.FAILED);
+      expect(result.context.workResults.get('failing')?.error?.message).toBe('Silent failure');
+      expect(result.context.workResults.get('last')?.result).toBe('completed');
+    });
+
+    it('should continue workflow when parallel work with silenceError fails', async () => {
+      const workflow = new Workflow<{ value: number }>()
+        .parallel([
+          { name: 'success', execute: async (ctx) => ctx.data.value * 2 },
+          {
+            name: 'failing',
+            execute: async () => {
+              throw new Error('Silent parallel failure');
+            },
+            silenceError: true,
+          },
+        ])
+        .serial({ name: 'last', execute: async () => 'completed' });
+
+      const result = await workflow.run({ value: 5 });
+
+      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.context.workResults.get('success')?.result).toBe(10);
+      expect(result.context.workResults.get('failing')?.status).toBe(WorkStatus.FAILED);
+      expect(result.context.workResults.get('failing')?.error?.message).toBe(
+        'Silent parallel failure'
+      );
+      expect(result.context.workResults.get('last')?.result).toBe('completed');
+    });
+
+    it('should still fail workflow when non-silenced work fails alongside silenced one', async () => {
+      const workflow = new Workflow<{ value: number }>().parallel([
+        {
+          name: 'silenced',
+          execute: async () => {
+            throw new Error('Silenced error');
+          },
+          silenceError: true,
+        },
+        {
+          name: 'notSilenced',
+          execute: async () => {
+            throw new Error('Not silenced error');
+          },
+        },
+      ]);
+
+      const result = await workflow.run({ value: 5 });
+
+      expect(result.status).toBe(WorkflowStatus.FAILED);
+      expect(result.error?.message).toBe('Not silenced error');
+    });
+
+    it('should call onError even when silenceError is true', async () => {
+      const onErrorFn = vi.fn();
+
+      const workflow = new Workflow<{ value: number }>().serial({
+        name: 'failing',
+        execute: async () => {
+          throw new Error('Error with handler');
+        },
+        silenceError: true,
+        onError: onErrorFn,
+      });
+
+      const result = await workflow.run({ value: 5 });
+
+      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(onErrorFn).toHaveBeenCalledTimes(1);
+      expect(onErrorFn).toHaveBeenCalledWith(expect.any(Error), expect.any(Object));
+    });
+
+    it('should allow accessing silenced error in subsequent work', async () => {
+      const workflow = new Workflow<{ value: number }>()
+        .serial({
+          name: 'failing',
+          execute: async () => {
+            throw new Error('Check me later');
+          },
+          silenceError: true,
+        })
+        .serial({
+          name: 'checker',
+          execute: async (ctx) => {
+            const failedResult = ctx.workResults.get('failing');
+            return {
+              wasFailed: failedResult.status === WorkStatus.FAILED,
+              errorMessage: failedResult.error?.message,
+            };
+          },
+        });
+
+      const result = await workflow.run({ value: 5 });
+
+      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.context.workResults.get('checker')?.result).toEqual({
+        wasFailed: true,
+        errorMessage: 'Check me later',
+      });
+    });
+  });
 });

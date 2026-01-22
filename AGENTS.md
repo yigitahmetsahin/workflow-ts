@@ -116,6 +116,7 @@ const myWork = new Work({
   execute: async (ctx) => value,
   shouldRun: (ctx) => true, // optional
   onError: (error, ctx) => {}, // optional
+  silenceError: true, // optional - don't fail workflow on error
 });
 
 const workflow2 = new Workflow<TData>()

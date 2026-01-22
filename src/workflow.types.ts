@@ -79,6 +79,8 @@ export interface IWorkDefinition<
     error: Error,
     context: IWorkflowContext<TData, TAvailableWorkResults>
   ) => void | Promise<void>;
+  /** Optional: if true, errors won't stop the workflow (result will be undefined) */
+  silenceError?: boolean;
 }
 
 /**

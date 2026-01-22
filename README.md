@@ -180,7 +180,38 @@ const conditionalWork = new Work({
   execute: async (ctx) => 'result',
   shouldRun: (ctx) => ctx.data.enabled, // Optional condition
   onError: (error, ctx) => console.error(error), // Optional error handler
+  silenceError: true, // Optional: don't fail workflow on error
 });
+```
+
+### Error Silencing
+
+Use `silenceError: true` to allow a work to fail without stopping the workflow. The error is still recorded and accessible:
+
+```typescript
+const workflow = new Workflow<{ userId: string }>()
+  .serial({
+    name: 'fetchOptionalData',
+    execute: async () => {
+      throw new Error('Service unavailable');
+    },
+    silenceError: true, // Won't stop the workflow
+    onError: (err) => console.warn('Optional fetch failed:', err.message),
+  })
+  .serial({
+    name: 'continue',
+    execute: async (ctx) => {
+      // Check if previous work failed
+      const optionalResult = ctx.workResults.get('fetchOptionalData');
+      if (optionalResult.status === WorkStatus.FAILED) {
+        return { data: null, error: optionalResult.error?.message };
+      }
+      return { data: optionalResult.result };
+    },
+  });
+
+const result = await workflow.run({ userId: '123' });
+// result.status === WorkflowStatus.COMPLETED (workflow continues despite error)
 ```
 
 ### `.run(initialData)`

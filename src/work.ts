@@ -41,11 +41,15 @@ export class Work<
     context: IWorkflowContext<TData, TAvailableWorkResults>
   ) => void | Promise<void>;
 
+  /** Optional: if true, errors won't stop the workflow (result will be undefined) */
+  readonly silenceError?: boolean;
+
   constructor(definition: IWorkDefinition<TName, TData, TResult, TAvailableWorkResults>) {
     this.name = definition.name;
     this.execute = definition.execute;
     this.shouldRun = definition.shouldRun;
     this.onError = definition.onError;
+    this.silenceError = definition.silenceError;
   }
 }
 

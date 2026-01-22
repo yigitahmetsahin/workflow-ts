@@ -210,19 +210,25 @@ export class Workflow<
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
 
-      workResults.set(work.name as keyof TWorkResults, {
+      const failedResult: IWorkResult = {
         status: WorkStatus.FAILED,
         error: err,
         duration: Date.now() - workStartTime,
-      });
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      context.workResults.set(work.name as keyof TWorkResults, failedResult as any);
+      workResults.set(work.name as keyof TWorkResults, failedResult);
 
       // Call error handler if provided
       if (work.onError) {
         await work.onError(err, context);
       }
 
-      // Re-throw to stop workflow execution
-      throw err;
+      // Re-throw to stop workflow execution (unless silenceError is true)
+      if (!work.silenceError) {
+        throw err;
+      }
     }
   }
 
@@ -281,8 +287,13 @@ export class Workflow<
           error: result.error,
           duration,
         };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        context.workResults.set(result.work.name as keyof TWorkResults, workResult as any);
         workResults.set(result.work.name as keyof TWorkResults, workResult);
-        errors.push({ work: result.work, error: result.error });
+        // Only track as error if silenceError is not set
+        if (!result.work.silenceError) {
+          errors.push({ work: result.work, error: result.error });
+        }
       } else {
         const workResult: IWorkResult = {
           status: WorkStatus.COMPLETED,
@@ -295,16 +306,15 @@ export class Workflow<
       }
     }
 
-    // Handle errors after all parallel works complete
-    if (errors.length > 0) {
-      // Call error handlers
-      for (const { work, error } of errors) {
-        if (work.onError) {
-          await work.onError(error, context);
-        }
+    // Call error handlers for all failed works (including silenced ones)
+    for (const result of results) {
+      if ('error' in result && result.error && result.work.onError) {
+        await result.work.onError(result.error, context);
       }
+    }
 
-      // Throw the first error to stop workflow
+    // Throw the first non-silenced error to stop workflow
+    if (errors.length > 0) {
       throw errors[0].error;
     }
   }
