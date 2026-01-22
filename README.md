@@ -181,6 +181,73 @@ const conditionalWork = new Work({
 });
 ```
 
+### `WorkGroup` - Dynamic Work Collections
+
+`WorkGroup` allows you to dynamically build a collection of works before passing them to `parallel()`. This is useful when you need to conditionally add works based on runtime conditions:
+
+```typescript
+import { Workflow, WorkGroup, Work } from '@yigitahmetsahin/workflow-ts';
+
+// Create a group and add works dynamically
+const group = new WorkGroup<{ userId: string }>();
+
+// Always fetch user data
+group.addWork({
+  name: 'fetchUser',
+  execute: async (ctx) => ({ id: ctx.data.userId, name: 'John' }),
+});
+
+// Conditionally add more works
+if (needsOrders) {
+  group.addWork({
+    name: 'fetchOrders',
+    execute: async (ctx) => [{ id: 1 }, { id: 2 }],
+  });
+}
+
+if (needsNotifications) {
+  group.addWork({
+    name: 'fetchNotifications',
+    execute: async (ctx) => [{ message: 'Hello' }],
+  });
+}
+
+// Pass the group to parallel()
+const workflow = new Workflow<{ userId: string }>().parallel(group);
+
+const result = await workflow.run({ userId: '123' });
+```
+
+`WorkGroup` can also use `Work` instances:
+
+```typescript
+const fetchUser = new Work({
+  name: 'fetchUser',
+  execute: async (ctx) => ({ id: ctx.data.userId }),
+});
+
+const group = new WorkGroup<{ userId: string }>().addWork(fetchUser).addWork({
+  name: 'fetchProfile',
+  execute: async (ctx) => ({ email: 'user@example.com' }),
+});
+```
+
+You can mix arrays and `WorkGroup` in the same workflow:
+
+```typescript
+const workflow = new Workflow<{ userId: string }>()
+  .parallel([work1, work2]) // Array syntax
+  .parallel(group) // WorkGroup syntax
+  .serial(finalWork);
+```
+
+Helper methods:
+
+```typescript
+group.isEmpty(); // Check if group has no works
+group.length; // Get the number of works in the group
+```
+
 ### `.run(initialData)`
 
 Execute the workflow with initial data.

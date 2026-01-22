@@ -8,7 +8,7 @@ import {
   IWorkResult,
   WorkStatus,
 } from './workflow.types';
-import { WorkInput, getWorkDefinition } from './work';
+import { WorkInput, getWorkDefinition, WorkGroup, isWorkGroup } from './work';
 
 /**
  * Internal implementation of IWorkResultsMap using a Map
@@ -95,22 +95,60 @@ export class Workflow<
 
   /**
    * Add parallel works to the workflow.
-   * Accepts either inline work definitions or Work instances.
+   * Accepts an array of work definitions, Work instances, or a WorkGroup.
    * All work names and result types are automatically inferred.
+   *
+   * @example Array of works
+   * ```typescript
+   * workflow.parallel([
+   *   { name: 'work1', execute: async () => 'result1' },
+   *   { name: 'work2', execute: async () => 123 },
+   * ]);
+   * ```
+   *
+   * @example WorkGroup for dynamic work building
+   * ```typescript
+   * const group = new WorkGroup<MyData>();
+   * if (condition) {
+   *   group.addWork({ name: 'conditionalWork', execute: async () => true });
+   * }
+   * workflow.parallel(group);
+   * ```
    */
+  parallel<TGroupResults extends Record<string, unknown>>(
+    works: WorkGroup<TData, TWorkResults, TGroupResults>
+  ): Workflow<TData, TWorkResults & TGroupResults>;
   parallel<const TParallelWorks extends readonly WorkInput<string, TData, unknown, TWorkResults>[]>(
     works: TParallelWorks
-  ): Workflow<TData, TWorkResults & ParallelWorksToRecord<TParallelWorks>> {
-    this.works.push({
-      type: 'parallel',
-      works: works.map((w) => getWorkDefinition(w)) as unknown as IWorkDefinition<
-        string,
-        TData,
-        unknown,
-        TWorkResults
-      >[],
-    });
-    return this as unknown as Workflow<TData, TWorkResults & ParallelWorksToRecord<TParallelWorks>>;
+  ): Workflow<TData, TWorkResults & ParallelWorksToRecord<TParallelWorks>>;
+  parallel<
+    TGroupResults extends Record<string, unknown>,
+    const TParallelWorks extends readonly WorkInput<string, TData, unknown, TWorkResults>[],
+  >(
+    works: WorkGroup<TData, TWorkResults, TGroupResults> | TParallelWorks
+  ): Workflow<TData, TWorkResults & (TGroupResults | ParallelWorksToRecord<TParallelWorks>)> {
+    if (isWorkGroup(works)) {
+      // Handle WorkGroup
+      const groupWorks = works.getWorks();
+      if (groupWorks.length > 0) {
+        this.works.push({
+          type: 'parallel',
+          works: groupWorks as unknown as IWorkDefinition<string, TData, unknown, TWorkResults>[],
+        });
+      }
+    } else {
+      // Handle array of works
+      this.works.push({
+        type: 'parallel',
+        works: (works as TParallelWorks).map((w) =>
+          getWorkDefinition(w)
+        ) as unknown as IWorkDefinition<string, TData, unknown, TWorkResults>[],
+      });
+    }
+    return this as unknown as Workflow<
+      TData,
+      TWorkResults & (TGroupResults | ParallelWorksToRecord<TParallelWorks>)
+    >;
   }
 
   /**

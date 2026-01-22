@@ -12,6 +12,7 @@ npx tsx examples/parallel.ts
 npx tsx examples/conditional.ts
 npx tsx examples/error-handling.ts
 npx tsx examples/work-class.ts
+npx tsx examples/work-group.ts
 ```
 
 ## Key API Pattern
@@ -81,3 +82,13 @@ Standalone work definitions demonstrating:
 - Mixing Work instances with inline definitions
 - Reusing the same Work across multiple workflows
 - Conditional execution with Work class
+
+### 6. WorkGroup (`work-group.ts`)
+
+Dynamic work collections demonstrating:
+
+- Building parallel work groups dynamically with `WorkGroup`
+- Conditionally adding works based on runtime conditions
+- Mixing arrays and `WorkGroup` in the same workflow
+- Using `Work` instances with `WorkGroup`
+- Handling empty `WorkGroup` gracefully
