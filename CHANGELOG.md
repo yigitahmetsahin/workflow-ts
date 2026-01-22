@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [3.2.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v3.1.0...v3.2.0) (2026-01-22)
+
+
+### Features
+
+* add failFast option to Workflow constructor ([e794622](https://github.com/yigitahmetsahin/workflow-ts/commit/e794622f1176419ee6e3503eba44c691ced1c811))
+* add silenceError option to Workflow constructor ([b4083a6](https://github.com/yigitahmetsahin/workflow-ts/commit/b4083a6d861b690a4fe4f2123657d3c3c674db93))
+
 ## [3.1.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v3.0.0...v3.1.0) (2026-01-22)
 
 
