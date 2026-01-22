@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [2.1.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v2.0.0...v2.1.0) (2026-01-22)
+
+
+### Features
+
+* add Work class for standalone work definitions ([24dcae4](https://github.com/yigitahmetsahin/workflow-ts/commit/24dcae4a82b7bc5d8b5fda2c63851830afd476ac))
+
 ## [2.0.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v1.2.1...v2.0.0) (2026-01-22)
 
 
