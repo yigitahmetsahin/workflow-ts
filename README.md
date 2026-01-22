@@ -2,10 +2,12 @@
 
 A simple, extensible TypeScript workflow engine supporting serial and parallel work execution with full type inference.
 
-[![npm version](https://badge.fury.io/js/%40yigitahmetsahin%2Fworkflow-ts.svg)](https://www.npmjs.com/package/@yigitahmetsahin/workflow-ts)
+[![npm version](https://img.shields.io/npm/v/@yigitahmetsahin/workflow-ts.svg)](https://www.npmjs.com/package/@yigitahmetsahin/workflow-ts)
+[![npm downloads](https://img.shields.io/npm/dm/@yigitahmetsahin/workflow-ts.svg)](https://www.npmjs.com/package/@yigitahmetsahin/workflow-ts)
 [![CI](https://github.com/yigitahmetsahin/workflow-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/yigitahmetsahin/workflow-ts/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3+-blue.svg)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/node/v/@yigitahmetsahin/workflow-ts.svg)](https://nodejs.org/)
 
 ## Features
 
