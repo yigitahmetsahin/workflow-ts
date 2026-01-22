@@ -40,12 +40,10 @@ export interface IWorkflowContext<
 export interface IWorkResultsMap<
   TWorkResults extends Record<string, unknown> = Record<string, unknown>,
 > {
-  /** Get a work result with compile-time type checking (requires chained workflow building) */
+  /** Get a work result with compile-time type checking */
   get<K extends keyof TWorkResults>(name: K): IWorkResult<TWorkResults[K]>;
-  /** Get a work result by name without compile-time type checking (for non-chained building) */
-  getAny(name: string): IWorkResult<unknown>;
   set<K extends keyof TWorkResults>(name: K, value: IWorkResult<TWorkResults[K]>): void;
-  /** Check if a work result exists (accepts any string for non-chained building) */
+  /** Check if a work result exists */
   has(name: string): boolean;
 }
 

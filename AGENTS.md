@@ -122,14 +122,6 @@ const workflow2 = new Workflow<TData>()
   .serial(myWork) // Work instance
   .parallel([work1, work2]); // Work instances or inline definitions can be mixed
 
-// Option 3: WorkGroup for dynamic parallel work building
-const group = new WorkGroup<TData>();
-group.addWork({ name: 'work1', execute: async (ctx) => value1 });
-if (condition) {
-  group.addWork({ name: 'conditionalWork', execute: async (ctx) => value2 });
-}
-const workflow3 = new Workflow<TData>().parallel(group);
-
 // Run workflow
 const result = await workflow.run(initialData);
 

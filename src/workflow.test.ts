@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Workflow } from './workflow';
-import { Work, WorkGroup, isWorkGroup } from './work';
+import { Work } from './work';
 import { WorkflowStatus, WorkStatus } from './workflow.types';
 
 describe('Workflow', () => {
@@ -431,39 +431,6 @@ describe('Workflow', () => {
       expect(result.context.workResults.has('notExists')).toBe(false);
     });
 
-    it('should support getAny() for non-chained workflow building', async () => {
-      // Non-chained building loses type inference but works at runtime
-      const workflow = new Workflow<{ value: number }>();
-      workflow.serial({ name: 'double', execute: async (ctx) => ctx.data.value * 2 });
-      workflow.serial({
-        name: 'useResult',
-        execute: async (ctx) => {
-          // getAny() works without compile-time type checking
-          const doubleResult = ctx.workResults.getAny('double');
-          return (doubleResult.result as number) + 1;
-        },
-      });
-
-      const result = await workflow.run({ value: 5 });
-
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
-      expect(result.context.workResults.getAny('double').result).toBe(10);
-      expect(result.context.workResults.getAny('useResult').result).toBe(11);
-    });
-
-    it('should throw error when getAny() called for non-existent work', async () => {
-      const workflow = new Workflow().serial({
-        name: 'exists',
-        execute: async () => 'value',
-      });
-
-      const result = await workflow.run({});
-
-      expect(() => result.context.workResults.getAny('notExists')).toThrow(
-        'Work result "notExists" not found'
-      );
-    });
-
     it('should allow setting and getting results', async () => {
       const workflow = new Workflow()
         .serial({
@@ -633,160 +600,6 @@ describe('Workflow', () => {
 
       expect(result1.context.workResults.get('shared')?.result).toBe(10);
       expect(result2.context.workResults.get('shared')?.result).toBe(20);
-    });
-  });
-
-  describe('WorkGroup', () => {
-    it('should execute works from WorkGroup in parallel', async () => {
-      const group = new WorkGroup<{ value: number }>()
-        .addWork({
-          name: 'double',
-          execute: async (ctx) => ctx.data.value * 2,
-        })
-        .addWork({
-          name: 'triple',
-          execute: async (ctx) => ctx.data.value * 3,
-        });
-
-      const workflow = new Workflow<{ value: number }>().parallel(group);
-
-      const result = await workflow.run({ value: 5 });
-
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
-      expect(result.context.workResults.get('double')?.result).toBe(10);
-      expect(result.context.workResults.get('triple')?.result).toBe(15);
-    });
-
-    it('should support conditional work addition', async () => {
-      const includeTriple = true;
-      const includeQuadruple = false;
-
-      const group = new WorkGroup<{ value: number }>().addWork({
-        name: 'double',
-        execute: async (ctx) => ctx.data.value * 2,
-      });
-
-      if (includeTriple) {
-        group.addWork({
-          name: 'triple',
-          execute: async (ctx) => ctx.data.value * 3,
-        });
-      }
-
-      if (includeQuadruple) {
-        group.addWork({
-          name: 'quadruple',
-          execute: async (ctx) => ctx.data.value * 4,
-        });
-      }
-
-      const workflow = new Workflow<{ value: number }>().parallel(group);
-
-      const result = await workflow.run({ value: 5 });
-
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
-      expect(result.context.workResults.get('double')?.result).toBe(10);
-      expect(result.context.workResults.get('triple')?.result).toBe(15);
-      expect(result.workResults.has('quadruple')).toBe(false);
-    });
-
-    it('should handle empty WorkGroup gracefully', async () => {
-      const group = new WorkGroup<{ value: number }>();
-
-      expect(group.isEmpty()).toBe(true);
-      expect(group.length).toBe(0);
-
-      const workflow = new Workflow<{ value: number }>()
-        .serial({
-          name: 'first',
-          execute: async (ctx) => ctx.data.value,
-        })
-        .parallel(group)
-        .serial({
-          name: 'last',
-          execute: async (ctx) => ctx.workResults.get('first')!.result! + 1,
-        });
-
-      const result = await workflow.run({ value: 5 });
-
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
-      expect(result.context.workResults.get('first')?.result).toBe(5);
-      expect(result.context.workResults.get('last')?.result).toBe(6);
-    });
-
-    it('should work with Work instances in WorkGroup', async () => {
-      const doubleWork = new Work({
-        name: 'double',
-        execute: async (ctx: { data: { value: number } }) => ctx.data.value * 2,
-      });
-
-      const tripleWork = new Work({
-        name: 'triple',
-        execute: async (ctx: { data: { value: number } }) => ctx.data.value * 3,
-      });
-
-      const group = new WorkGroup<{ value: number }>().addWork(doubleWork).addWork(tripleWork);
-
-      const workflow = new Workflow<{ value: number }>().parallel(group);
-
-      const result = await workflow.run({ value: 5 });
-
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
-      expect(result.context.workResults.get('double')?.result).toBe(10);
-      expect(result.context.workResults.get('triple')?.result).toBe(15);
-    });
-
-    it('should mix array and WorkGroup in same workflow', async () => {
-      const group = new WorkGroup<{ value: number }>()
-        .addWork({
-          name: 'groupWork1',
-          execute: async (ctx) => ctx.data.value + 1,
-        })
-        .addWork({
-          name: 'groupWork2',
-          execute: async (ctx) => ctx.data.value + 2,
-        });
-
-      const workflow = new Workflow<{ value: number }>()
-        .parallel([
-          { name: 'arrayWork1', execute: async (ctx) => ctx.data.value * 2 },
-          { name: 'arrayWork2', execute: async (ctx) => ctx.data.value * 3 },
-        ])
-        .parallel(group);
-
-      const result = await workflow.run({ value: 5 });
-
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
-      expect(result.context.workResults.get('arrayWork1')?.result).toBe(10);
-      expect(result.context.workResults.get('arrayWork2')?.result).toBe(15);
-      expect(result.context.workResults.get('groupWork1')?.result).toBe(6);
-      expect(result.context.workResults.get('groupWork2')?.result).toBe(7);
-    });
-
-    it('should support isWorkGroup type guard', () => {
-      const group = new WorkGroup<{ value: number }>();
-      const work = new Work({ name: 'test', execute: async () => 1 });
-      const array = [{ name: 'test', execute: async () => 1 }];
-
-      expect(isWorkGroup(group)).toBe(true);
-      expect(isWorkGroup(work)).toBe(false);
-      expect(isWorkGroup(array)).toBe(false);
-      expect(isWorkGroup(null)).toBe(false);
-      expect(isWorkGroup(undefined)).toBe(false);
-    });
-
-    it('should track length correctly', () => {
-      const group = new WorkGroup<{ value: number }>();
-
-      expect(group.length).toBe(0);
-      expect(group.isEmpty()).toBe(true);
-
-      group.addWork({ name: 'work1', execute: async () => 1 });
-      expect(group.length).toBe(1);
-      expect(group.isEmpty()).toBe(false);
-
-      group.addWork({ name: 'work2', execute: async () => 2 });
-      expect(group.length).toBe(2);
     });
   });
 });
