@@ -77,13 +77,6 @@ class WorkResultsMap<
  */
 export interface WorkflowOptions {
   /**
-   * Default silenceError for all works.
-   * If a work has its own silenceError defined, the work's value takes precedence.
-   * @default false
-   */
-  silenceError?: boolean;
-
-  /**
    * Whether to stop execution immediately when a work fails.
    * - true: Stop on first failure (default)
    * - false: Continue executing remaining works, fail at the end if any work failed
@@ -100,7 +93,7 @@ export class Workflow<
   private options: Required<WorkflowOptions>;
 
   constructor(options: WorkflowOptions = {}) {
-    this.options = { silenceError: false, failFast: true, ...options };
+    this.options = { failFast: true, ...options };
   }
 
   /**
@@ -271,9 +264,7 @@ export class Workflow<
       }
 
       // Re-throw to stop workflow execution (unless silenceError is true)
-      // Work's silenceError takes precedence over workflow's default
-      const shouldSilence = work.silenceError ?? this.options.silenceError;
-      if (!shouldSilence) {
+      if (!work.silenceError) {
         throw err;
       }
     }
@@ -338,9 +329,7 @@ export class Workflow<
         context.workResults.set(result.work.name as keyof TWorkResults, workResult as any);
         workResults.set(result.work.name as keyof TWorkResults, workResult);
         // Only track as error if silenceError is not set
-        // Work's silenceError takes precedence over workflow's default
-        const shouldSilence = result.work.silenceError ?? this.options.silenceError;
-        if (!shouldSilence) {
+        if (!result.work.silenceError) {
           errors.push({ work: result.work, error: result.error });
         }
       } else {

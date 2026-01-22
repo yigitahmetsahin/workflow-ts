@@ -214,49 +214,12 @@ const result = await workflow.run({ userId: '123' });
 // result.status === WorkflowStatus.COMPLETED (workflow continues despite error)
 ```
 
-You can also set `silenceError` at the workflow level as a default for all works:
-
-```typescript
-// All works will have silenceError: true by default
-const workflow = new Workflow<{ userId: string }>({ silenceError: true })
-  .serial({
-    name: 'work1',
-    execute: async () => {
-      throw new Error('Ignored');
-    },
-  })
-  .serial({
-    name: 'work2',
-    execute: async () => {
-      throw new Error('Also ignored');
-    },
-  })
-  .serial({ name: 'final', execute: async () => 'completed' });
-
-// Individual works can override the workflow default
-const mixedWorkflow = new Workflow<{ userId: string }>({ silenceError: true })
-  .serial({
-    name: 'optional',
-    execute: async () => {
-      throw new Error('Silenced');
-    },
-  })
-  .serial({
-    name: 'critical',
-    execute: async () => {
-      throw new Error('Must fail');
-    },
-    silenceError: false, // Override: this error WILL fail the workflow
-  });
-```
-
 ### Workflow Options
 
 The `Workflow` constructor accepts an options object:
 
 ```typescript
 interface WorkflowOptions {
-  silenceError?: boolean; // Default error handling for all works (default: false)
   failFast?: boolean; // Stop on first error or continue (default: true)
 }
 ```
@@ -296,24 +259,23 @@ const result = await workflow.run({ userId: '123' });
 // result.context.workResults.get('work3')?.result === 'still runs'
 ```
 
-You can combine `failFast: false` with `silenceError: true` to run all works and complete successfully:
+You can combine `failFast: false` with work-level `silenceError` to run all works and complete successfully:
 
 ```typescript
-const workflow = new Workflow<{ userId: string }>({
-  failFast: false,
-  silenceError: true,
-})
+const workflow = new Workflow<{ userId: string }>({ failFast: false })
   .serial({
     name: 'optional1',
     execute: async () => {
       throw new Error('Ignored');
     },
+    silenceError: true,
   })
   .serial({
     name: 'optional2',
     execute: async () => {
       throw new Error('Also ignored');
     },
+    silenceError: true,
   })
   .serial({ name: 'final', execute: async () => 'done' });
 

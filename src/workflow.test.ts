@@ -723,89 +723,6 @@ describe('Workflow', () => {
         errorMessage: 'Check me later',
       });
     });
-
-    it('should use workflow silenceError as default for all works', async () => {
-      const workflow = new Workflow<{ value: number }>({ silenceError: true })
-        .serial({
-          name: 'failing1',
-          execute: async () => {
-            throw new Error('First failure');
-          },
-        })
-        .serial({
-          name: 'failing2',
-          execute: async () => {
-            throw new Error('Second failure');
-          },
-        })
-        .serial({ name: 'last', execute: async () => 'completed' });
-
-      const result = await workflow.run({ value: 5 });
-
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
-      expect(result.context.workResults.get('failing1')?.status).toBe(WorkStatus.FAILED);
-      expect(result.context.workResults.get('failing2')?.status).toBe(WorkStatus.FAILED);
-      expect(result.context.workResults.get('last')?.result).toBe('completed');
-    });
-
-    it('should use workflow silenceError for parallel works', async () => {
-      const workflow = new Workflow<{ value: number }>({ silenceError: true })
-        .parallel([
-          {
-            name: 'failing1',
-            execute: async () => {
-              throw new Error('Parallel failure 1');
-            },
-          },
-          {
-            name: 'failing2',
-            execute: async () => {
-              throw new Error('Parallel failure 2');
-            },
-          },
-        ])
-        .serial({ name: 'last', execute: async () => 'completed' });
-
-      const result = await workflow.run({ value: 5 });
-
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
-      expect(result.context.workResults.get('failing1')?.status).toBe(WorkStatus.FAILED);
-      expect(result.context.workResults.get('failing2')?.status).toBe(WorkStatus.FAILED);
-      expect(result.context.workResults.get('last')?.result).toBe('completed');
-    });
-
-    it('should allow work to override workflow silenceError with false', async () => {
-      const workflow = new Workflow<{ value: number }>({ silenceError: true }).serial({
-        name: 'failing',
-        execute: async () => {
-          throw new Error('Should fail workflow');
-        },
-        silenceError: false, // Override workflow default
-      });
-
-      const result = await workflow.run({ value: 5 });
-
-      expect(result.status).toBe(WorkflowStatus.FAILED);
-      expect(result.error?.message).toBe('Should fail workflow');
-    });
-
-    it('should allow work to override workflow default with explicit true', async () => {
-      const workflow = new Workflow<{ value: number }>() // Default silenceError: false
-        .serial({
-          name: 'failing',
-          execute: async () => {
-            throw new Error('Silenced by work');
-          },
-          silenceError: true, // Work explicitly enables
-        })
-        .serial({ name: 'last', execute: async () => 'completed' });
-
-      const result = await workflow.run({ value: 5 });
-
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
-      expect(result.context.workResults.get('failing')?.status).toBe(WorkStatus.FAILED);
-      expect(result.context.workResults.get('last')?.result).toBe('completed');
-    });
   });
 
   describe('failFast option', () => {
@@ -951,16 +868,17 @@ describe('Workflow', () => {
       expect(result.context.workResults.get('after')?.result).toBe('after done');
     });
 
-    it('should combine failFast: false with silenceError', async () => {
+    it('should combine failFast: false with work-level silenceError', async () => {
       const executionOrder: string[] = [];
 
-      const workflow = new Workflow<{ value: number }>({ failFast: false, silenceError: true })
+      const workflow = new Workflow<{ value: number }>({ failFast: false })
         .serial({
           name: 'fail1',
           execute: async () => {
             executionOrder.push('fail1');
             throw new Error('Silenced');
           },
+          silenceError: true,
         })
         .serial({
           name: 'fail2',
@@ -968,6 +886,7 @@ describe('Workflow', () => {
             executionOrder.push('fail2');
             throw new Error('Also silenced');
           },
+          silenceError: true,
         })
         .serial({
           name: 'last',
@@ -979,7 +898,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ value: 5 });
 
-      // silenceError means errors are silenced, so workflow completes
+      // silenceError on each work means errors are silenced, so workflow completes
       expect(result.status).toBe(WorkflowStatus.COMPLETED);
       expect(executionOrder).toEqual(['fail1', 'fail2', 'last']);
     });

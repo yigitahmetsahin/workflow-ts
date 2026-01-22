@@ -103,8 +103,8 @@ Examples:
 
 ```typescript
 // Option 1: Inline work definitions
-// Options: { silenceError?: boolean, failFast?: boolean }
-const workflow = new Workflow<TData>() // or new Workflow<TData>({ silenceError: true, failFast: false })
+// Options: { failFast?: boolean }
+const workflow = new Workflow<TData>() // or new Workflow<TData>({ failFast: false })
   .serial({ name: 'step1', execute: async (ctx) => value })
   .parallel([
     { name: 'parallel1', execute: async (ctx) => value1 },
