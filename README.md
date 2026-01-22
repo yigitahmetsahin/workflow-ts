@@ -214,6 +214,42 @@ const result = await workflow.run({ userId: '123' });
 // result.status === WorkflowStatus.COMPLETED (workflow continues despite error)
 ```
 
+You can also set `silenceError` at the workflow level as a default for all works:
+
+```typescript
+// All works will have silenceError: true by default
+const workflow = new Workflow<{ userId: string }>({ silenceError: true })
+  .serial({
+    name: 'work1',
+    execute: async () => {
+      throw new Error('Ignored');
+    },
+  })
+  .serial({
+    name: 'work2',
+    execute: async () => {
+      throw new Error('Also ignored');
+    },
+  })
+  .serial({ name: 'final', execute: async () => 'completed' });
+
+// Individual works can override the workflow default
+const mixedWorkflow = new Workflow<{ userId: string }>({ silenceError: true })
+  .serial({
+    name: 'optional',
+    execute: async () => {
+      throw new Error('Silenced');
+    },
+  })
+  .serial({
+    name: 'critical',
+    execute: async () => {
+      throw new Error('Must fail');
+    },
+    silenceError: false, // Override: this error WILL fail the workflow
+  });
+```
+
 ### `.run(initialData)`
 
 Execute the workflow with initial data.

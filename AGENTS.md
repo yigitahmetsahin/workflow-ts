@@ -103,7 +103,7 @@ Examples:
 
 ```typescript
 // Option 1: Inline work definitions
-const workflow = new Workflow<TData>()
+const workflow = new Workflow<TData>() // or new Workflow<TData>({ silenceError: true })
   .serial({ name: 'step1', execute: async (ctx) => value })
   .parallel([
     { name: 'parallel1', execute: async (ctx) => value1 },

@@ -72,11 +72,28 @@ class WorkResultsMap<
  * const result = await workflow.run({ userId: '123' });
  * ```
  */
+/**
+ * Options for configuring workflow behavior
+ */
+export interface WorkflowOptions {
+  /**
+   * Default silenceError for all works.
+   * If a work has its own silenceError defined, the work's value takes precedence.
+   * @default false
+   */
+  silenceError?: boolean;
+}
+
 export class Workflow<
   TData = Record<string, unknown>,
   TWorkResults extends Record<string, unknown> = NonNullable<unknown>,
 > {
   private works: IWorkflowWork[] = [];
+  private options: WorkflowOptions;
+
+  constructor(options: WorkflowOptions = {}) {
+    this.options = { silenceError: false, ...options };
+  }
 
   /**
    * Add a serial work to the workflow.
@@ -226,7 +243,9 @@ export class Workflow<
       }
 
       // Re-throw to stop workflow execution (unless silenceError is true)
-      if (!work.silenceError) {
+      // Work's silenceError takes precedence over workflow's default
+      const shouldSilence = work.silenceError ?? this.options.silenceError;
+      if (!shouldSilence) {
         throw err;
       }
     }
@@ -291,7 +310,9 @@ export class Workflow<
         context.workResults.set(result.work.name as keyof TWorkResults, workResult as any);
         workResults.set(result.work.name as keyof TWorkResults, workResult);
         // Only track as error if silenceError is not set
-        if (!result.work.silenceError) {
+        // Work's silenceError takes precedence over workflow's default
+        const shouldSilence = result.work.silenceError ?? this.options.silenceError;
+        if (!shouldSilence) {
           errors.push({ work: result.work, error: result.error });
         }
       } else {
