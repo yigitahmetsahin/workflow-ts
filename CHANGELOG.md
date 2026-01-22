@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [2.0.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v1.2.1...v2.0.0) (2026-01-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* ctx.workResults.get() now returns IWorkResult<T> instead of T. Access the value via .result property: ctx.workResults.get('name').result
+
+### Features
+
+* workResults.get returns IWorkResult instead of raw value ([9067ca0](https://github.com/yigitahmetsahin/workflow-ts/commit/9067ca071a0f3878ad5d87de42ad0a0c92c3d16a))
+
+
+### Bug Fixes
+
+* resolve TypeScript errors in conditional example ([9f87e4e](https://github.com/yigitahmetsahin/workflow-ts/commit/9f87e4eb6fff26937277f512e8a2567c8c0bdeb5))
+
 ## [1.2.1](https://github.com/yigitahmetsahin/workflow-ts/compare/v1.2.0...v1.2.1) (2026-01-22)
 
 
