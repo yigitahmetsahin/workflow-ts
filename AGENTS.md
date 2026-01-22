@@ -120,3 +120,4 @@ const result = await workflow.run(initialData);
 - Do NOT create tags manually - Release Please creates them
 - The `dist/` folder is gitignored but included in npm package
 - npm publishing uses GitHub OIDC trusted publishing (no tokens needed)
+- **ALWAYS run `npm install` after adding/updating dependencies** to update `package-lock.json`
