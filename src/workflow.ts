@@ -20,7 +20,9 @@ class WorkResultsMap<
   get<K extends keyof TWorkResults>(name: K): IWorkResult<TWorkResults[K]> {
     const result = this.map.get(name);
     if (!result) {
-      throw new Error(`Work result "${String(name)}" not found. This work may not have executed yet.`);
+      throw new Error(
+        `Work result "${String(name)}" not found. This work may not have executed yet.`
+      );
     }
     return result as IWorkResult<TWorkResults[K]>;
   }
