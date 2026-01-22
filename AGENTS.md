@@ -119,6 +119,25 @@ console.log(step1Result.result); // the actual return value
 console.log(step1Result.duration); // execution time in ms
 ```
 
+## Documentation & Testing Requirements
+
+When making code changes, **ALWAYS keep the following up to date**:
+
+1. **Unit Tests** (`src/workflow.test.ts`)
+   - Add tests for new features or bug fixes
+   - Update existing tests when API changes
+
+2. **Documentation** 
+   - `README.md` - User-facing documentation and API examples
+   - `AGENTS.md` - Developer/agent instructions and key types
+   - `examples/README.md` - Examples overview
+
+3. **Examples** (`examples/*.ts`)
+   - Update to reflect current API usage
+   - Ensure all examples are runnable and correct
+
+Documentation, tests, and examples should be updated **in the same PR** as the code changes, not as a follow-up.
+
 ## Important Notes
 
 - Do NOT manually bump version in `package.json` - Release Please handles this
