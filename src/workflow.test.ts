@@ -425,6 +425,7 @@ describe('Workflow', () => {
       const result = await workflow.run({});
 
       expect(result.context.workResults.has('exists')).toBe(true);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(result.context.workResults.has('notExists' as any)).toBe(false);
     });
 

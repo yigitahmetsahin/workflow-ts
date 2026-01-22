@@ -84,7 +84,7 @@ export interface IWorkDefinition<
  */
 export interface IWorkflowWork {
   type: 'serial' | 'parallel';
-
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   works: IWorkDefinition<string, any, any, any>[];
 }
 

@@ -140,6 +140,7 @@ export class Workflow<
    * Execute a single work
    */
   private async executeWork(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     work: IWorkDefinition<string, TData, any, any>,
     context: IWorkflowContext<TData, TWorkResults>,
     workResults: Map<keyof TWorkResults, IWorkResult>
@@ -192,6 +193,7 @@ export class Workflow<
    * Execute multiple works in parallel
    */
   private async executeParallelWorks(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     works: IWorkDefinition<string, TData, any, any>[],
     context: IWorkflowContext<TData, TWorkResults>,
     workResults: Map<keyof TWorkResults, IWorkResult>
@@ -223,7 +225,7 @@ export class Workflow<
     const results = await Promise.all(promises);
 
     // Process results and check for errors
-
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const errors: { work: IWorkDefinition<string, TData, any, any>; error: Error }[] = [];
 
     for (const result of results) {
