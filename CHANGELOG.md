@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [1.1.1](https://github.com/yigitahmetsahin/workflow-ts/compare/v1.1.0...v1.1.1) (2026-01-22)
+
+
+### Bug Fixes
+
+* update dependencies and documentation ([34fdb5a](https://github.com/yigitahmetsahin/workflow-ts/commit/34fdb5a4a8ff17ce8c0906549dacb2a329fa1afb))
+
 ## [1.1.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v1.0.6...v1.1.0) (2026-01-22)
 
 ### Features
