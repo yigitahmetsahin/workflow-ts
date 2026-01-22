@@ -1,7 +1,7 @@
 /**
  * Conditional workflow example - Skip steps based on conditions
  */
-import { Workflow, WorkflowStatus } from '../src';
+import { Workflow } from '../src';
 
 interface NotificationData {
   userId: string;
@@ -56,7 +56,7 @@ async function main() {
     .serial({
       name: 'logNotifications',
       execute: async (ctx) => {
-        const sent = [];
+        const sent: string[] = [];
         if (ctx.workResults.get('sendEmailNotification')) sent.push('email');
         if (ctx.workResults.get('sendSmsNotification')) sent.push('sms');
         if (ctx.workResults.get('sendPushNotification')) sent.push('push');
