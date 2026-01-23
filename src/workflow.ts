@@ -10,7 +10,6 @@ import {
   IWorkflow,
   ISealedWorkflow,
   ISealingWorkDefinition,
-  ISealedWorkflowWithExecute,
   WorkflowOptions,
   ParallelWorksToRecord,
 } from './workflow.types';
@@ -82,12 +81,26 @@ export class Workflow<
   TData = Record<string, unknown>,
   TWorkResults extends Record<string, unknown> = NonNullable<unknown>,
 > implements IWorkflow<TData, TWorkResults> {
-  private works: IWorkflowWork[] = [];
-  private options: Required<WorkflowOptions>;
+  private _works: IWorkflowWork[] = [];
+  private _options: Required<WorkflowOptions>;
   private _sealed = false;
 
   constructor(options: WorkflowOptions = {}) {
-    this.options = { failFast: true, ...options };
+    this._options = { failFast: true, ...options };
+  }
+
+  /**
+   * The list of works in the workflow (readonly)
+   */
+  get works(): readonly IWorkflowWork[] {
+    return this._works;
+  }
+
+  /**
+   * The workflow options (readonly)
+   */
+  get options(): Readonly<Required<WorkflowOptions>> {
+    return this._options;
   }
 
   /**
@@ -109,7 +122,7 @@ export class Workflow<
     if (this._sealed) {
       throw new Error('Cannot add work to a sealed workflow');
     }
-    this.works.push({
+    this._works.push({
       type: 'serial',
       works: [getWorkDefinition(work)],
     });
@@ -136,7 +149,7 @@ export class Workflow<
     if (this._sealed) {
       throw new Error('Cannot add work to a sealed workflow');
     }
-    this.works.push({
+    this._works.push({
       type: 'parallel',
       works: works.map((w) => getWorkDefinition(w)),
     });
@@ -149,46 +162,33 @@ export class Workflow<
    *
    * @example
    * ```typescript
-   * // Without options - returns ISealedWorkflow
    * const sealed = new Workflow<{ userId: string }>()
    *   .serial({ name: 'step1', execute: async () => 'result' })
    *   .seal();
    *
+   * sealed.name; // 'seal'
    * sealed.isSealed(); // true
    * await sealed.run({ userId: '123' }); // OK
    *
-   * // With sealing work - returns ISealedWorkflowWithExecute
-   * const sealedWithExecute = workflow.seal({
-   *   execute: async (ctx) => {
-   *     console.log('Before:', ctx.data);
-   *     const result = await workflow.run(ctx.data);
-   *     console.log('After');
-   *     return result;
-   *   },
-   *   // Optional: shouldRun, onError, silenceError (like IWorkDefinition)
-   * });
-   *
-   * sealedWithExecute.name; // 'seal'
-   * await sealedWithExecute.execute({ data: initialData, workResults: ... });
+   * // TypeScript prevents modifications:
+   * // sealed.serial(...) // Error: Property 'serial' does not exist
    * ```
    */
   seal(): ISealedWorkflow<TData, TWorkResults>;
-  seal(
-    sealingWork: ISealingWorkDefinition<TData, TWorkResults>
-  ): ISealedWorkflowWithExecute<TData, TWorkResults>;
-  seal(
-    sealingWork?: ISealingWorkDefinition<TData, TWorkResults>
-  ): ISealedWorkflow<TData, TWorkResults> | ISealedWorkflowWithExecute<TData, TWorkResults> {
+  seal<TResult>(
+    sealingWork: ISealingWorkDefinition<TData, TWorkResults, TResult>
+  ): ISealedWorkflow<TData, TWorkResults>;
+  seal<TResult>(
+    _sealingWork?: ISealingWorkDefinition<TData, TWorkResults, TResult>
+  ): ISealedWorkflow<TData, TWorkResults> {
     this._sealed = true;
-    if (sealingWork?.execute) {
-      return {
-        name: 'seal',
-        isSealed: () => this._sealed,
-        run: this.run.bind(this),
-        execute: sealingWork.execute,
-      };
-    }
-    return this;
+    return {
+      name: 'seal',
+      works: this._works,
+      options: this._options,
+      isSealed: () => this._sealed,
+      run: this.run.bind(this),
+    };
   }
 
   /**
@@ -204,7 +204,7 @@ export class Workflow<
     const collectedErrors: Error[] = [];
 
     try {
-      for (const workGroup of this.works) {
+      for (const workGroup of this._works) {
         try {
           if (workGroup.type === 'serial') {
             await this.executeWork(workGroup.works[0], context, workResults);
@@ -213,7 +213,7 @@ export class Workflow<
           }
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
-          if (this.options.failFast) {
+          if (this._options.failFast) {
             throw err;
           }
           collectedErrors.push(err);

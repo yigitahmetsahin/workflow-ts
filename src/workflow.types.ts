@@ -115,6 +115,16 @@ export interface IWorkflow<
   TWorkResults extends Record<string, unknown> = Record<string, unknown>,
 > {
   /**
+   * The list of works in the workflow (readonly)
+   */
+  readonly works: readonly IWorkflowWork[];
+
+  /**
+   * The workflow options (readonly)
+   */
+  readonly options: Readonly<Required<WorkflowOptions>>;
+
+  /**
    * Add a serial work to the workflow
    */
   serial<TName extends string, TResult>(
@@ -124,18 +134,20 @@ export interface IWorkflow<
   /**
    * Add parallel works to the workflow
    */
-
-  parallel(
-    works: readonly IWorkDefinition<string, TData, any, TWorkResults>[]
-  ): IWorkflow<TData, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  parallel(works: readonly IWorkDefinition<string, TData, any, TWorkResults>[]): IWorkflow<
+    TData,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    any
+  >;
 
   /**
    * Seal the workflow to prevent further modifications
    */
   seal(): ISealedWorkflow<TData, TWorkResults>;
-  seal(
-    sealingWork: ISealingWorkDefinition<TData, TWorkResults>
-  ): ISealedWorkflowWithExecute<TData, TWorkResults>;
+  seal<TResult>(
+    sealingWork: ISealingWorkDefinition<TData, TWorkResults, TResult>
+  ): ISealedWorkflow<TData, TWorkResults>;
 
   /**
    * Check if the workflow is sealed
@@ -149,58 +161,26 @@ export interface IWorkflow<
 }
 
 /**
- * A limited work definition for sealing a workflow.
- * Similar to IWorkDefinition but without 'name' (hardcoded as 'seal').
- * The execute function returns IWorkflowResult instead of a custom result type.
+ * A work definition for sealing a workflow.
+ * Similar to IWorkDefinition but without 'name'.
  */
 export type ISealingWorkDefinition<
   TData = Record<string, unknown>,
   TWorkResults extends Record<string, unknown> = Record<string, unknown>,
-> = Omit<
-  IWorkDefinition<'seal', TData, IWorkflowResult<TData, TWorkResults>, TWorkResults>,
-  'name'
->;
+  TResult = unknown,
+> = Omit<IWorkDefinition<'seal', TData, TResult, TWorkResults>, 'name'>;
 
 /**
  * A sealed workflow that can only be executed, not modified.
  * Use workflow.seal() to create a sealed workflow.
+ * Picks `works`, `options`, `isSealed`, and `run` from IWorkflow, adds `name: 'seal'`.
  */
-export interface ISealedWorkflow<
+export type ISealedWorkflow<
   TData = Record<string, unknown>,
   TWorkResults extends Record<string, unknown> = Record<string, unknown>,
-> {
-  /**
-   * Check if the workflow is sealed
-   */
-  isSealed(): boolean;
-
-  /**
-   * Execute the workflow with initial data
-   */
-  run(initialData: TData): Promise<IWorkflowResult<TData, TWorkResults>>;
-}
-
-/**
- * A sealed workflow with a custom execute function.
- * Created when seal() is called with an execute option.
- */
-export interface ISealedWorkflowWithExecute<
-  TData = Record<string, unknown>,
-  TWorkResults extends Record<string, unknown> = Record<string, unknown>,
-> extends ISealedWorkflow<TData, TWorkResults> {
-  /**
-   * Hardcoded name for the sealed workflow
-   */
+> = Pick<IWorkflow<TData, TWorkResults>, 'works' | 'options' | 'isSealed' | 'run'> & {
   readonly name: 'seal';
-
-  /**
-   * Custom execute function provided during sealing.
-   * Receives context (like a Work).
-   */
-  execute(
-    context: IWorkflowContext<TData, TWorkResults>
-  ): Promise<IWorkflowResult<TData, TWorkResults>>;
-}
+};
 
 /**
  * Options for configuring workflow behavior

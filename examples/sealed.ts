@@ -1,18 +1,23 @@
 /**
  * Sealed workflow example - Prevent modifications after construction
  */
-import { Workflow, WorkflowStatus } from '../src';
+import { Workflow, WorkflowStatus, ISealedWorkflow } from '../src';
 
 interface UserData {
   userId: string;
 }
 
+type UserWorkResults = {
+  validate: boolean;
+  fetchUser: { id: string; name: string; email: string };
+};
+
 /**
- * Factory function that returns a sealed workflow with custom execute.
- * The execute function wraps the workflow execution with logging.
+ * Factory function that returns a sealed workflow.
+ * Once sealed, the workflow cannot be modified.
  */
-function buildUserWorkflow() {
-  const workflow = new Workflow<UserData>()
+function buildUserWorkflow(): ISealedWorkflow<UserData, UserWorkResults> {
+  return new Workflow<UserData>()
     .serial({
       name: 'validate',
       execute: async (ctx) => {
@@ -31,17 +36,8 @@ function buildUserWorkflow() {
         await new Promise((r) => setTimeout(r, 100));
         return { id: ctx.data.userId, name: 'John Doe', email: 'john@example.com' };
       },
-    });
-
-  // Seal with custom execute that wraps the workflow with logging
-  return workflow.seal({
-    execute: async (ctx) => {
-      console.log('>>> Before workflow execution');
-      const result = await workflow.run(ctx.data);
-      console.log('<<< After workflow execution');
-      return result;
-    },
-  });
+    })
+    .seal();
 }
 
 async function main() {
@@ -50,20 +46,19 @@ async function main() {
   // Create a sealed workflow from the factory
   const userWorkflow = buildUserWorkflow();
 
-  // Check properties of sealed workflow with execute
+  // Sealed workflow has name, works, options, isSealed(), and run()
   console.log(`Name: ${userWorkflow.name}`); // 'seal'
+  console.log(`Works: ${userWorkflow.works.length} work groups`);
+  console.log(`Options: failFast=${userWorkflow.options.failFast}`);
   console.log(`Is sealed: ${userWorkflow.isSealed()}`); // true
 
   // TypeScript prevents modifications:
   // userWorkflow.serial(...) // ❌ Error: Property 'serial' does not exist
   // userWorkflow.parallel(...) // ❌ Error: Property 'parallel' does not exist
 
-  // Use execute() with context - shows custom logging
-  console.log('\nUsing execute() with custom logging...\n');
-  const result = await userWorkflow.execute({
-    data: { userId: 'user-123' },
-    workResults: {} as never, // Context is passed to execute
-  });
+  // Use run() to execute the sealed workflow
+  console.log('\nRunning sealed workflow...\n');
+  const result = await userWorkflow.run({ userId: 'user-123' });
 
   if (result.status === WorkflowStatus.COMPLETED) {
     console.log('\n✅ Workflow completed!');
@@ -71,12 +66,12 @@ async function main() {
     console.log('User:', result.context.workResults.get('fetchUser').result);
   }
 
-  // Can also use run() directly (bypasses custom execute)
-  console.log('\n--- Using run() directly (no custom logging) ---\n');
+  // Run again with different data
+  console.log('\n--- Second Run ---\n');
   const result2 = await userWorkflow.run({ userId: 'user-456' });
 
   if (result2.status === WorkflowStatus.COMPLETED) {
-    console.log('\n✅ Second run completed!');
+    console.log('✅ Second run completed!');
     console.log('User:', result2.context.workResults.get('fetchUser').result);
   }
 }

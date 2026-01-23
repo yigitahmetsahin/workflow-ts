@@ -184,9 +184,9 @@ const conditionalWork = new Work({
 });
 ```
 
-### `.seal(options?)`
+### `.seal(sealingWork?)`
 
-Seal the workflow to prevent further modifications. Returns an `ISealedWorkflow` that only exposes the `run()` and `isSealed()` methods.
+Seal the workflow to prevent further modifications. Returns an `ISealedWorkflow` that exposes `name`, `works`, `options`, `isSealed()`, and `run()`.
 
 ```typescript
 const sealed = new Workflow<{ userId: string }>()
@@ -200,42 +200,18 @@ const sealed = new Workflow<{ userId: string }>()
   ])
   .seal();
 
+// Sealed workflow properties
+console.log(sealed.name); // 'seal'
+console.log(sealed.works); // readonly array of work definitions
+console.log(sealed.options); // { failFast: true }
+console.log(sealed.isSealed()); // true
+
 // TypeScript prevents further modifications:
 // sealed.serial(...) // ❌ Error: Property 'serial' does not exist
 // sealed.parallel(...) // ❌ Error: Property 'parallel' does not exist
 
-// Check if sealed
-console.log(sealed.isSealed()); // true
-
-// Only run() is available:
+// Only run() is available for execution:
 const result = await sealed.run({ userId: '123' }); // ✅ OK
-```
-
-#### With Sealing Work
-
-You can pass an `ISealingWorkDefinition` (similar to `IWorkDefinition` but without `name`) to wrap the workflow execution:
-
-```typescript
-const workflow = new Workflow<{ userId: string }>()
-  .serial({ name: 'fetchUser', execute: async (ctx) => ({ id: ctx.data.userId }) });
-
-const sealed = workflow.seal({
-  execute: async (ctx) => {
-    console.log('Before:', ctx.data.userId);
-    const result = await workflow.run(ctx.data);
-    console.log('After');
-    return result;
-  },
-  // Optional: supports same options as IWorkDefinition
-  // shouldRun: (ctx) => ctx.data.enabled,
-  // onError: (error, ctx) => console.error(error),
-  // silenceError: true,
-});
-
-// Has name 'seal' and custom execute function
-console.log(sealed.name); // 'seal'
-await sealed.execute({ data: { userId: '123' }, workResults: ... }); // Uses custom execute
-await sealed.run({ userId: '123' }); // Bypasses custom execute
 ```
 
 This is useful when you want to:
@@ -243,7 +219,6 @@ This is useful when you want to:
 - **Enforce immutability** - Ensure the workflow definition cannot be accidentally modified after construction
 - **Expose a clean API** - Pass a sealed workflow to other parts of your code that should only execute it, not modify it
 - **Type safety** - Get compile-time errors if someone tries to add more works to a finalized workflow
-- **Wrap execution** - Add logging, metrics, or other cross-cutting concerns via custom execute
 
 ```typescript
 // Example: Factory function that returns a sealed workflow
@@ -258,6 +233,7 @@ function buildUserWorkflow(): ISealedWorkflow<{ userId: string }, { user: User }
 
 // Consumers can only run the workflow
 const workflow = buildUserWorkflow();
+console.log(workflow.name); // 'seal'
 const result = await workflow.run({ userId: '123' });
 ```
 

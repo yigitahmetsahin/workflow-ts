@@ -1,12 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Workflow } from './workflow';
 import { Work } from './work';
-import {
-  WorkflowStatus,
-  WorkStatus,
-  ISealedWorkflow,
-  ISealedWorkflowWithExecute,
-} from './workflow.types';
+import { WorkflowStatus, WorkStatus, ISealedWorkflow } from './workflow.types';
 
 describe('Workflow', () => {
   describe('serial execution', () => {
@@ -986,7 +981,7 @@ describe('Workflow', () => {
       expect(workflow.isSealed()).toBe(true); // Same instance
     });
 
-    it('should throw error when adding serial work to sealed workflow', () => {
+    it('should not have serial method on sealed workflow', () => {
       const workflow = new Workflow<{ value: number }>()
         .serial({
           name: 'first',
@@ -994,16 +989,11 @@ describe('Workflow', () => {
         })
         .seal();
 
-      expect(() => {
-        // @ts-expect-error - serial doesn't exist on ISealedWorkflow, but we test runtime behavior
-        workflow.serial({
-          name: 'second',
-          execute: async () => 'should fail',
-        });
-      }).toThrow('Cannot add work to a sealed workflow');
+      // @ts-expect-error - serial doesn't exist on ISealedWorkflow
+      expect(workflow.serial).toBeUndefined();
     });
 
-    it('should throw error when adding parallel work to sealed workflow', () => {
+    it('should not have parallel method on sealed workflow', () => {
       const workflow = new Workflow<{ value: number }>()
         .serial({
           name: 'first',
@@ -1011,85 +1001,8 @@ describe('Workflow', () => {
         })
         .seal();
 
-      expect(() => {
-        // @ts-expect-error - parallel doesn't exist on ISealedWorkflow, but we test runtime behavior
-        workflow.parallel([
-          {
-            name: 'second',
-            execute: async () => 'should fail',
-          },
-        ]);
-      }).toThrow('Cannot add work to a sealed workflow');
-    });
-
-    it('should return ISealedWorkflowWithExecute when called with execute option', async () => {
-      const workflow = new Workflow<{ value: number }>().serial({
-        name: 'double',
-        execute: async (ctx) => ctx.data.value * 2,
-      });
-
-      const sealed = workflow.seal({
-        execute: async (ctx) => workflow.run(ctx.data),
-      });
-
-      // Should have name property
-      expect(sealed.name).toBe('seal');
-
-      // Should have isSealed, run and execute methods
-      expect(sealed.isSealed()).toBe(true);
-      expect(typeof sealed.run).toBe('function');
-      expect(typeof sealed.execute).toBe('function');
-
-      // run() should work
-      const runResult = await sealed.run({ value: 5 });
-      expect(runResult.status).toBe(WorkflowStatus.COMPLETED);
-      expect(runResult.context.workResults.get('double')?.result).toBe(10);
-
-      // execute() with context should work
-      const executeResult = await sealed.execute({
-        data: { value: 7 },
-        workResults: runResult.context.workResults,
-      });
-      expect(executeResult.status).toBe(WorkflowStatus.COMPLETED);
-      expect(executeResult.context.workResults.get('double')?.result).toBe(14);
-    });
-
-    it('should return type assignable to ISealedWorkflowWithExecute', () => {
-      const workflow = new Workflow<{ value: number }>().serial({
-        name: 'double',
-        execute: async (ctx) => ctx.data.value * 2,
-      });
-
-      const sealed: ISealedWorkflowWithExecute<{ value: number }, { double: number }> =
-        workflow.seal({
-          execute: async (ctx) => workflow.run(ctx.data),
-        });
-
-      expect(sealed.name).toBe('seal');
-      expect(typeof sealed.execute).toBe('function');
-      expect(typeof sealed.run).toBe('function');
-    });
-
-    it('should allow custom execute logic with context in seal options', async () => {
-      const executionLog: string[] = [];
-
-      const workflow = new Workflow<{ value: number }>().serial({
-        name: 'double',
-        execute: async (ctx) => ctx.data.value * 2,
-      });
-
-      const sealed = workflow.seal({
-        execute: async (ctx) => {
-          executionLog.push(`before: ${ctx.data.value}`);
-          const result = await workflow.run(ctx.data);
-          executionLog.push('after');
-          return result;
-        },
-      });
-
-      await sealed.execute({ data: { value: 5 }, workResults: {} as never });
-
-      expect(executionLog).toEqual(['before: 5', 'after']);
+      // @ts-expect-error - parallel doesn't exist on ISealedWorkflow
+      expect(workflow.parallel).toBeUndefined();
     });
   });
 });
