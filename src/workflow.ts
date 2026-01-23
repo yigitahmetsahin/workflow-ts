@@ -38,8 +38,8 @@ class WorkResultsMap<
     this.map.set(name, value);
   }
 
-  has(name: string): boolean {
-    return this.map.has(name as keyof TWorkResults);
+  has<K extends keyof TWorkResults>(name: K): boolean {
+    return this.map.has(name);
   }
 }
 
@@ -113,7 +113,7 @@ export class Workflow<
       type: 'serial',
       works: [getWorkDefinition(work)],
     });
-    return this as unknown as Workflow<TData, TWorkResults & { [K in TName]: TResult }>;
+    return this as Workflow<TData, TWorkResults & { [K in TName]: TResult }>;
   }
 
   /**
@@ -138,14 +138,9 @@ export class Workflow<
     }
     this.works.push({
       type: 'parallel',
-      works: works.map((w) => getWorkDefinition(w)) as unknown as IWorkDefinition<
-        string,
-        TData,
-        unknown,
-        TWorkResults
-      >[],
+      works: works.map((w) => getWorkDefinition(w)),
     });
-    return this as unknown as Workflow<TData, TWorkResults & ParallelWorksToRecord<TParallelWorks>>;
+    return this as Workflow<TData, TWorkResults & ParallelWorksToRecord<TParallelWorks>>;
   }
 
   /**
@@ -187,7 +182,7 @@ export class Workflow<
     this._sealed = true;
     if (sealingWork?.execute) {
       return {
-        name: 'seal' as const,
+        name: 'seal',
         isSealed: () => this._sealed,
         run: this.run.bind(this),
         execute: sealingWork.execute,
@@ -212,19 +207,9 @@ export class Workflow<
       for (const workGroup of this.works) {
         try {
           if (workGroup.type === 'serial') {
-            await this.executeWork(
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              workGroup.works[0] as IWorkDefinition<string, TData, any, any>,
-              context,
-              workResults
-            );
+            await this.executeWork(workGroup.works[0], context, workResults);
           } else {
-            await this.executeParallelWorks(
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              workGroup.works as IWorkDefinition<string, TData, any, any>[],
-              context,
-              workResults
-            );
+            await this.executeParallelWorks(workGroup.works, context, workResults);
           }
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
