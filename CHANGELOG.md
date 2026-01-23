@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [3.3.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v3.2.0...v3.3.0) (2026-01-23)
+
+
+### Features
+
+* add seal method to workflow ([b60b00a](https://github.com/yigitahmetsahin/workflow-ts/commit/b60b00ac969947db4343aca02b5f4b052000eef8))
+
 ## [3.2.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v3.1.0...v3.2.0) (2026-01-22)
 
 
