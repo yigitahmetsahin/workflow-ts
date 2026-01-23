@@ -19,17 +19,11 @@ npm test
 # Run tests in watch mode
 npm run test:watch
 
-# Lint (ESLint + TypeScript)
+# Lint, format, and type-check (auto-fixes issues)
 npm run lint
 
-# Fix lint issues
-npm run lint:fix
-
-# Format code (Prettier)
-npm run format
-
-# Check formatting
-npm run format:check
+# Check only (no auto-fix, used in CI)
+npm run lint:check
 ```
 
 ## Code Style
@@ -59,15 +53,30 @@ src/
 - Tests use Vitest framework
 - For timing-related tests, use tolerances (e.g., `toBeGreaterThanOrEqual(45)` instead of exact `50`) to account for CI variance
 
-## Pre-PR Checklist
+## Pre-Commit Checklist
 
-Before sending any pull request, **ALWAYS run**:
+Before committing any changes, **ALWAYS run**:
 
 ```bash
 npm run lint
 ```
 
-This runs both ESLint and TypeScript type checking. All lint errors must be resolved before submitting a PR.
+This automatically:
+
+1. Formats all files with Prettier
+2. Fixes ESLint issues
+3. Runs TypeScript type checking
+
+All errors must be resolved before committing. The formatted files will be staged automatically.
+
+## Editor Setup
+
+This project includes VS Code settings (`.vscode/settings.json`) that:
+
+- Auto-format on save with Prettier
+- Auto-fix ESLint issues on save
+
+Install the [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode) and [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) VS Code extensions for the best experience.
 
 ## Build System
 
