@@ -4,6 +4,55 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [3.4.1](https://github.com/yigitahmetsahin/workflow-ts/compare/workflow-ts-v3.4.0...workflow-ts-v3.4.1) (2026-01-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* WorkGroup, isWorkGroup, WORK_GROUP_SYMBOL, when(), and getAny() have been removed. Use chained .serial() and .parallel() calls.
+* ctx.workResults.get() now returns IWorkResult<T> instead of T. Access the value via .result property: ctx.workResults.get('name').result
+
+### Features
+
+* add ESLint and Prettier ([7b88fa5](https://github.com/yigitahmetsahin/workflow-ts/commit/7b88fa57ca54f4b90ac7fe482c28d49cd14e70a4))
+* add failFast option to Workflow constructor ([e794622](https://github.com/yigitahmetsahin/workflow-ts/commit/e794622f1176419ee6e3503eba44c691ced1c811))
+* add getAny() for non-chained workflow building ([96d717b](https://github.com/yigitahmetsahin/workflow-ts/commit/96d717b247aeb4a0aa18924febb9b65051da54af))
+* add release-please bot for automated releases ([a5c37bf](https://github.com/yigitahmetsahin/workflow-ts/commit/a5c37bfccbbd161642eed7c02fcfd21a2c9bf29b))
+* add seal method to workflow ([b60b00a](https://github.com/yigitahmetsahin/workflow-ts/commit/b60b00ac969947db4343aca02b5f4b052000eef8))
+* add silenceError option to continue workflow on work failure ([44537de](https://github.com/yigitahmetsahin/workflow-ts/commit/44537de06b7cf300e123fa991c138e2af1a9e8f5))
+* add silenceError option to Workflow constructor ([b4083a6](https://github.com/yigitahmetsahin/workflow-ts/commit/b4083a6d861b690a4fe4f2123657d3c3c674db93))
+* add Work class for standalone work definitions ([24dcae4](https://github.com/yigitahmetsahin/workflow-ts/commit/24dcae4a82b7bc5d8b5fda2c63851830afd476ac))
+* add WorkGroup for dynamic parallel work building ([8220c7c](https://github.com/yigitahmetsahin/workflow-ts/commit/8220c7c72f3c44bbaee247b966b6000052ecc437))
+* expose ISealingWorkDefinition type for sealing workflows ([49ccaaf](https://github.com/yigitahmetsahin/workflow-ts/commit/49ccaafb7e9e03a6a2f2dbe904b78d1483f592a6))
+* fully automate releases on version bump ([58bd9e1](https://github.com/yigitahmetsahin/workflow-ts/commit/58bd9e132c08b64903435d8073a4a3331e6fe61c))
+* simplify API to chaining-only workflow building ([6c92fda](https://github.com/yigitahmetsahin/workflow-ts/commit/6c92fda42e6ccf56b7c6d08dab7b55955f0045e2))
+* use Node 24 and trigger release on tag push ([2e0a385](https://github.com/yigitahmetsahin/workflow-ts/commit/2e0a3854a77377f06968d9e29852c6e4ec02c100))
+* use release-please for automated releases ([37a66ed](https://github.com/yigitahmetsahin/workflow-ts/commit/37a66ed50d6116cf2eb790c71d7f379e7ffad638))
+* workResults.get returns IWorkResult instead of raw value ([9067ca0](https://github.com/yigitahmetsahin/workflow-ts/commit/9067ca071a0f3878ad5d87de42ad0a0c92c3d16a))
+
+
+### Bug Fixes
+
+* add NODE_AUTH_TOKEN env for npm publish ([8d7f712](https://github.com/yigitahmetsahin/workflow-ts/commit/8d7f712ab5d39620e2563c996a061ca607988b46))
+* correct examples to use relative imports and proper API ([4125ee0](https://github.com/yigitahmetsahin/workflow-ts/commit/4125ee03acc9d14c416478071d183f79454461b3))
+* flaky timing tests in CI ([c1eb317](https://github.com/yigitahmetsahin/workflow-ts/commit/c1eb317a9dcf7311bbea838986a973293bff68cd))
+* OIDC workflow - remove registry-url for automatic auth ([c154255](https://github.com/yigitahmetsahin/workflow-ts/commit/c15425552fd109ceec57a05106a367a03fc9a112))
+* resolve TypeScript errors in conditional example ([9f87e4e](https://github.com/yigitahmetsahin/workflow-ts/commit/9f87e4eb6fff26937277f512e8a2567c8c0bdeb5))
+* revert to simpler auto-release without bot ([11987af](https://github.com/yigitahmetsahin/workflow-ts/commit/11987af9b3ef903d51e42b280f79df9e40dbc740))
+* suppress necessary any type warnings with eslint comments ([acd8f72](https://github.com/yigitahmetsahin/workflow-ts/commit/acd8f7292e6d05c0b8a1ab9701b9847ac246edaf))
+* update dependencies and documentation ([34fdb5a](https://github.com/yigitahmetsahin/workflow-ts/commit/34fdb5a4a8ff17ce8c0906549dacb2a329fa1afb))
+* update npm for OIDC trusted publishing support ([deeac79](https://github.com/yigitahmetsahin/workflow-ts/commit/deeac79d326c9e06c901c8c08a30b10aaf91f822))
+* update release workflow for npm OIDC publishing ([5fd4d9a](https://github.com/yigitahmetsahin/workflow-ts/commit/5fd4d9ae7495f4a43d59fd76bf93802a00e591a0))
+* use chained workflow methods to preserve type inference ([090f702](https://github.com/yigitahmetsahin/workflow-ts/commit/090f7025bb0397025a5d4327de83ef11dbc8f830))
+* use release-please manifest mode to read config ([b4f2a55](https://github.com/yigitahmetsahin/workflow-ts/commit/b4f2a554da494e6f570337a9ae6ecd96a03b6c90))
+
+
+### Refactoring
+
+* remove silenceError from WorkflowOptions ([aa6a6a7](https://github.com/yigitahmetsahin/workflow-ts/commit/aa6a6a7526d74883a4c1181604c5b68f53cb3162))
+* remove unnecessary type casts in workflow execution ([41c926a](https://github.com/yigitahmetsahin/workflow-ts/commit/41c926a04fb40c80f033b691ca4f74566cf18849))
+* rename ISealOptions to ISealingWorkDefinition ([82e1e1a](https://github.com/yigitahmetsahin/workflow-ts/commit/82e1e1a11e74b83eeecd30227002934713bc6da2))
+
 ## [3.4.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v3.3.0...v3.4.0) (2026-01-23)
 
 
