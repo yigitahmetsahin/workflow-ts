@@ -12,6 +12,7 @@ npx tsx examples/parallel.ts
 npx tsx examples/conditional.ts
 npx tsx examples/error-handling.ts
 npx tsx examples/work-class.ts
+npx tsx examples/sealed.ts
 ```
 
 ## Key API Pattern
@@ -34,6 +35,20 @@ if (userResult.status === WorkStatus.COMPLETED) {
 } else if (userResult.status === WorkStatus.SKIPPED) {
   console.log('User fetch was skipped');
 }
+```
+
+## Sealing Workflows
+
+Use `.seal()` to prevent further modifications to a workflow:
+
+```typescript
+// Seal a workflow to only expose run()
+const sealed = new Workflow<{ userId: string }>()
+  .serial({ name: 'validate', execute: async (ctx) => true })
+  .seal();
+
+// sealed.serial(...) // TypeScript error!
+await sealed.run({ userId: '123' }); // OK
 ```
 
 ## Examples Overview
@@ -81,3 +96,12 @@ Standalone work definitions demonstrating:
 - Mixing Work instances with inline definitions
 - Reusing the same Work across multiple workflows
 - Conditional execution with Work class
+
+### 6. Sealed (`sealed.ts`)
+
+Immutable workflow pattern demonstrating:
+
+- Using `.seal()` to prevent modifications
+- Factory functions that return `ISealedWorkflow`
+- Type-safe workflow distribution
+- Reusing sealed workflows with different data

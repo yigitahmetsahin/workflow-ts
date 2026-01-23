@@ -105,3 +105,17 @@ export interface IWorkflowResult<
   totalDuration: number;
   error?: Error;
 }
+
+/**
+ * A sealed workflow that can only be executed, not modified.
+ * Use workflow.seal() to create a sealed workflow.
+ */
+export interface ISealedWorkflow<
+  TData = Record<string, unknown>,
+  TWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> {
+  /**
+   * Execute the workflow with initial data
+   */
+  run(initialData: TData): Promise<IWorkflowResult<TData, TWorkResults>>;
+}

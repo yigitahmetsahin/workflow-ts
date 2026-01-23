@@ -7,6 +7,7 @@ import {
   IWorkDefinition,
   IWorkResult,
   WorkStatus,
+  ISealedWorkflow,
 } from './workflow.types';
 import { WorkInput, getWorkDefinition } from './work';
 
@@ -137,6 +138,25 @@ export class Workflow<
       >[],
     });
     return this as unknown as Workflow<TData, TWorkResults & ParallelWorksToRecord<TParallelWorks>>;
+  }
+
+  /**
+   * Seal the workflow to prevent further modifications.
+   * Returns a SealedWorkflow that can only be executed with run().
+   *
+   * @example
+   * ```typescript
+   * const sealed = new Workflow<{ userId: string }>()
+   *   .serial({ name: 'step1', execute: async () => 'result' })
+   *   .seal();
+   *
+   * // sealed.serial() - TypeScript error! Method doesn't exist
+   * // sealed.parallel() - TypeScript error! Method doesn't exist
+   * await sealed.run({ userId: '123' }); // OK
+   * ```
+   */
+  seal(): ISealedWorkflow<TData, TWorkResults> {
+    return this;
   }
 
   /**

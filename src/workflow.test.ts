@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Workflow } from './workflow';
 import { Work } from './work';
-import { WorkflowStatus, WorkStatus } from './workflow.types';
+import { WorkflowStatus, WorkStatus, ISealedWorkflow } from './workflow.types';
 
 describe('Workflow', () => {
   describe('serial execution', () => {
@@ -901,6 +901,70 @@ describe('Workflow', () => {
       // silenceError on each work means errors are silenced, so workflow completes
       expect(result.status).toBe(WorkflowStatus.COMPLETED);
       expect(executionOrder).toEqual(['fail1', 'fail2', 'last']);
+    });
+  });
+
+  describe('seal', () => {
+    it('should return a sealed workflow that can be executed', async () => {
+      const sealed = new Workflow<{ value: number }>()
+        .serial({
+          name: 'double',
+          execute: async (ctx) => ctx.data.value * 2,
+        })
+        .seal();
+
+      const result = await sealed.run({ value: 5 });
+
+      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.context.workResults.get('double')?.result).toBe(10);
+    });
+
+    it('should preserve workflow type information in sealed workflow', async () => {
+      const sealed = new Workflow<{ input: number }>()
+        .serial({
+          name: 'step1',
+          execute: async (ctx) => ctx.data.input + 1,
+        })
+        .parallel([
+          { name: 'double', execute: async (ctx) => ctx.data.input * 2 },
+          { name: 'triple', execute: async (ctx) => ctx.data.input * 3 },
+        ])
+        .seal();
+
+      const result = await sealed.run({ input: 10 });
+
+      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.context.workResults.get('step1')?.result).toBe(11);
+      expect(result.context.workResults.get('double')?.result).toBe(20);
+      expect(result.context.workResults.get('triple')?.result).toBe(30);
+    });
+
+    it('should return type assignable to ISealedWorkflow', () => {
+      const sealed: ISealedWorkflow<{ value: number }, { double: number }> = new Workflow<{
+        value: number;
+      }>()
+        .serial({
+          name: 'double',
+          execute: async (ctx) => ctx.data.value * 2,
+        })
+        .seal();
+
+      // Type check: sealed should only have run method
+      expect(typeof sealed.run).toBe('function');
+    });
+
+    it('should work with Work class instances', async () => {
+      const doubleWork = new Work({
+        name: 'double',
+        execute: async (ctx: { data: { value: number } }) => ctx.data.value * 2,
+      });
+
+      const sealed = new Workflow<{ value: number }>().serial(doubleWork).seal();
+
+      const result = await sealed.run({ value: 7 });
+
+      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.context.workResults.get('double')?.result).toBe(14);
     });
   });
 });

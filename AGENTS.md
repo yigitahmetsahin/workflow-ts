@@ -59,6 +59,16 @@ src/
 - Tests use Vitest framework
 - For timing-related tests, use tolerances (e.g., `toBeGreaterThanOrEqual(45)` instead of exact `50`) to account for CI variance
 
+## Pre-PR Checklist
+
+Before sending any pull request, **ALWAYS run**:
+
+```bash
+npm run lint
+```
+
+This runs both ESLint and TypeScript type checking. All lint errors must be resolved before submitting a PR.
+
 ## Build System
 
 - Uses `tsup` for building ESM, CJS, and DTS outputs
@@ -132,6 +142,12 @@ const step1Result = result.context.workResults.get('step1');
 console.log(step1Result.status); // 'completed' | 'failed' | 'skipped'
 console.log(step1Result.result); // the actual return value
 console.log(step1Result.duration); // execution time in ms
+
+// Option 3: Seal workflow to prevent modifications
+const sealed: ISealedWorkflow<TData, TWorkResults> = workflow.seal();
+// sealed.serial(...) - TypeScript error! Method doesn't exist
+// sealed.parallel(...) - TypeScript error! Method doesn't exist
+await sealed.run(initialData); // Only run() is available
 ```
 
 ## Documentation & Testing Requirements

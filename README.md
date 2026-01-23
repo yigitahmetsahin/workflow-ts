@@ -184,6 +184,52 @@ const conditionalWork = new Work({
 });
 ```
 
+### `.seal()`
+
+Seal the workflow to prevent further modifications. Returns an `ISealedWorkflow` that only exposes the `run()` method.
+
+```typescript
+const sealed = new Workflow<{ userId: string }>()
+  .serial({
+    name: 'validate',
+    execute: async (ctx) => ctx.data.userId.length > 0,
+  })
+  .parallel([
+    { name: 'fetchOrders', execute: async (ctx) => [{ id: 1 }] },
+    { name: 'fetchProfile', execute: async (ctx) => ({ name: 'John' }) },
+  ])
+  .seal();
+
+// TypeScript prevents further modifications:
+// sealed.serial(...) // ❌ Error: Property 'serial' does not exist
+// sealed.parallel(...) // ❌ Error: Property 'parallel' does not exist
+
+// Only run() is available:
+const result = await sealed.run({ userId: '123' }); // ✅ OK
+```
+
+This is useful when you want to:
+
+- **Enforce immutability** - Ensure the workflow definition cannot be accidentally modified after construction
+- **Expose a clean API** - Pass a sealed workflow to other parts of your code that should only execute it, not modify it
+- **Type safety** - Get compile-time errors if someone tries to add more works to a finalized workflow
+
+```typescript
+// Example: Factory function that returns a sealed workflow
+function createUserWorkflow(): ISealedWorkflow<{ userId: string }, { user: User }> {
+  return new Workflow<{ userId: string }>()
+    .serial({
+      name: 'user',
+      execute: async (ctx) => fetchUser(ctx.data.userId),
+    })
+    .seal();
+}
+
+// Consumers can only run the workflow
+const workflow = createUserWorkflow();
+const result = await workflow.run({ userId: '123' });
+```
+
 ### Error Silencing
 
 Use `silenceError: true` to allow a work to fail without stopping the workflow. The error is still recorded and accessible:
