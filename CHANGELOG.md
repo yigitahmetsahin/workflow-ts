@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [3.4.1](https://github.com/yigitahmetsahin/workflow-ts/compare/v3.4.0...v3.4.1) (2026-01-23)
+
+
+### Bug Fixes
+
+* use release-please manifest mode to read config ([b4f2a55](https://github.com/yigitahmetsahin/workflow-ts/commit/b4f2a554da494e6f570337a9ae6ecd96a03b6c90))
+* use v{version} tag format for release-please ([6b30461](https://github.com/yigitahmetsahin/workflow-ts/commit/6b3046188346b9018411119d72fec77b09490007))
+
+
+### Refactoring
+
+* remove unnecessary type casts in workflow execution ([41c926a](https://github.com/yigitahmetsahin/workflow-ts/commit/41c926a04fb40c80f033b691ca4f74566cf18849))
+
 ## [3.4.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v3.3.0...v3.4.0) (2026-01-23)
 
 
