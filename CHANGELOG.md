@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [3.4.5](https://github.com/yigitahmetsahin/workflow-ts/compare/v3.4.4...v3.4.5) (2026-01-24)
+
+
+### Bug Fixes
+
+* use default semver versioning for release-please ([b74f2c7](https://github.com/yigitahmetsahin/workflow-ts/commit/b74f2c7e88ec8e1bc261b416b38576f2e7c0dd4c))
+
 ## [3.4.4](https://github.com/yigitahmetsahin/workflow-ts/compare/v3.4.3...v3.4.4) (2026-01-24)
 
 
