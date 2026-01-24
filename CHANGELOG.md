@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [4.0.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v3.4.6...v4.0.0) (2026-01-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* Status values are now enum members instead of string literals. Consumers should update comparisons from:   result.status === 'completed'
+
+### Features
+
+* convert WorkStatus and WorkflowStatus to enums ([934608a](https://github.com/yigitahmetsahin/workflow-ts/commit/934608ab385b7dc966b4edcac0b0fc69703359d8))
+
 ## [3.4.6](https://github.com/yigitahmetsahin/workflow-ts/compare/v3.4.5...v3.4.6) (2026-01-24)
 
 
