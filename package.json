@@ -1,6 +1,6 @@
 {
   "name": "@yigitahmetsahin/workflow-ts",
-  "version": "3.4.5",
+  "version": "3.4.6",
   "description": "A simple, extensible TypeScript workflow engine supporting serial and parallel work execution with full type inference",
   "main": "dist/index.js",
   "module": "dist/index.mjs",

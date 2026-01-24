@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [3.4.6](https://github.com/yigitahmetsahin/workflow-ts/compare/v3.4.5...v3.4.6) (2026-01-24)
+
+
+### Refactoring
+
+* rename type aliases to remove I prefix ([00b3fc3](https://github.com/yigitahmetsahin/workflow-ts/commit/00b3fc3ce855e3bd2d2adfc2b9c3c2f07dd984dd))
+
 ## [3.4.5](https://github.com/yigitahmetsahin/workflow-ts/compare/v3.4.4...v3.4.5) (2026-01-24)
 
 
