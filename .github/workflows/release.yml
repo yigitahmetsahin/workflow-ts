@@ -1,12 +1,9 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows: ['CI']
-    types:
-      - completed
-    branches:
-      - main
+  # Run on pushes to main (merges)
+  push:
+    branches: [main]
 
 permissions:
   contents: write
@@ -14,20 +11,8 @@ permissions:
   id-token: write
 
 jobs:
-  release-please:
-    runs-on: ubuntu-latest
-    # Only run if CI workflow succeeded
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-    steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
-
-  publish:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+  # Job 1: CI (lint, test, build)
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,18 +20,49 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-
-      - name: Update npm for OIDC support
-        run: npm install -g npm@latest
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint and check formatting
+        run: npm run lint:check
+
       - name: Run tests
-        run: npm test --if-present
+        run: npm test
 
       - name: Build
-        run: npm run build --if-present
+        run: npm run build
+
+  # Job 2: Release Please (creates/updates release PR)
+  release-please:
+    needs: ci
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+
+  # Job 3: Publish to npm (only if release was created)
+  publish:
+    needs: release-please
+    if: needs.release-please.outputs.release_created
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
 
       - name: Publish to npm with OIDC provenance
         run: npm publish --provenance --access public
