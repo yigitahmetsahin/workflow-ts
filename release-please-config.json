@@ -2,7 +2,6 @@
   "packages": {
     ".": {
       "release-type": "node",
-      "versioning": "always-bump-patch",
       "include-component-in-tag": false,
       "changelog-sections": [
         { "type": "feat", "section": "Features" },
