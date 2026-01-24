@@ -1,12 +1,23 @@
 /**
  * Work Status
  */
-export type WorkStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+export enum WorkStatus {
+  Pending = 'pending',
+  Running = 'running',
+  Completed = 'completed',
+  Failed = 'failed',
+  Skipped = 'skipped',
+}
 
 /**
  * Workflow Status
  */
-export type WorkflowStatus = 'pending' | 'running' | 'completed' | 'failed';
+export enum WorkflowStatus {
+  Pending = 'pending',
+  Running = 'running',
+  Completed = 'completed',
+  Failed = 'failed',
+}
 
 /**
  * Context passed between workflow works

@@ -1,7 +1,7 @@
 /**
  * Basic workflow example - Simple serial execution
  */
-import { Workflow } from '../src';
+import { Workflow, WorkflowStatus } from '../src';
 
 interface UserData {
   userId: string;
@@ -30,7 +30,7 @@ async function main() {
 
   const result = await workflow.run({ userId: 'user-123' });
 
-  if (result.status === 'completed') {
+  if (result.status === WorkflowStatus.Completed) {
     console.log('\n✅ Workflow completed!');
     console.log(`Total duration: ${result.totalDuration}ms`);
     console.log('Results:', {

@@ -20,6 +20,8 @@ npx tsx examples/sealed.ts
 All examples use the `WorkResult` pattern for accessing work results:
 
 ```typescript
+import { WorkStatus } from '@yigitahmetsahin/workflow-ts';
+
 // workResults.get() returns WorkResult with status, result, duration
 const userResult = ctx.workResults.get('fetchUser');
 
@@ -30,9 +32,9 @@ const user = userResult.result;
 const user = ctx.workResults.get('fetchUser').result;
 
 // Check execution status
-if (userResult.status === 'completed') {
+if (userResult.status === WorkStatus.Completed) {
   console.log('User fetched:', userResult.result);
-} else if (userResult.status === 'skipped') {
+} else if (userResult.status === WorkStatus.Skipped) {
   console.log('User fetch was skipped');
 }
 ```

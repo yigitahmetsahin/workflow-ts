@@ -41,9 +41,9 @@ npm run lint:check
 
 - **Use `interface`** for contracts that will be implemented by classes (e.g., `IWorkflow`, `IWorkDefinition`, `IWorkResultsMap`, `IWorkflowContext`)
 - **Use `type`** for data structures, return types, and type aliases that are not implemented (e.g., `WorkResult`, `WorkflowResult`, `WorkflowWork`, `WorkflowOptions`)
-- **Use string union types** instead of enums for status values (e.g., `type WorkStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'`)
+- **Use enums** for status values (e.g., `enum WorkStatus { Pending = 'pending', Running = 'running', ... }`)
 
-This distinction helps clarify intent: interfaces define behavior contracts, types define data shapes. String unions are preferred over enums for simplicity and better tree-shaking.
+This distinction helps clarify intent: interfaces define behavior contracts, types define data shapes. Enums provide type safety and prevent `@typescript-eslint/no-unsafe-enum-comparison` errors in consuming projects.
 
 ## Project Structure
 
@@ -160,7 +160,7 @@ const result = await workflow.run(initialData);
 
 // Access results - workResults.get() returns WorkResult, not raw value
 const step1Result = result.context.workResults.get('step1');
-console.log(step1Result.status); // 'completed' | 'failed' | 'skipped'
+console.log(step1Result.status); // WorkStatus.Completed | WorkStatus.Failed | WorkStatus.Skipped
 console.log(step1Result.result); // the actual return value
 console.log(step1Result.duration); // execution time in ms
 

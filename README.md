@@ -36,7 +36,7 @@ pnpm add @yigitahmetsahin/workflow-ts
 ## Quick Start
 
 ```typescript
-import { Workflow, Work, WorkflowStatus } from '@yigitahmetsahin/workflow-ts';
+import { Workflow, Work, WorkflowStatus, WorkStatus } from '@yigitahmetsahin/workflow-ts';
 
 // Option 1: Define works inline
 const workflow = new Workflow<{ userId: string }>()
@@ -80,7 +80,7 @@ const workflow2 = new Workflow<{ userId: string }>().serial(validateUser).parall
 
 const result = await workflow.run({ userId: 'user-123' });
 
-if (result.status === 'completed') {
+if (result.status === WorkflowStatus.Completed) {
   console.log('Workflow completed in', result.totalDuration, 'ms');
   console.log('Final result:', result.context.workResults.get('process').result);
 }
@@ -268,6 +268,8 @@ console.log(result.workResults.get('finalize')?.result); // { orders, profile, s
 Use `silenceError: true` to allow a work to fail without stopping the workflow. The error is still recorded and accessible:
 
 ```typescript
+import { Workflow, WorkStatus, WorkflowStatus } from '@yigitahmetsahin/workflow-ts';
+
 const workflow = new Workflow<{ userId: string }>()
   .serial({
     name: 'fetchOptionalData',
@@ -282,7 +284,7 @@ const workflow = new Workflow<{ userId: string }>()
     execute: async (ctx) => {
       // Check if previous work failed
       const optionalResult = ctx.workResults.get('fetchOptionalData');
-      if (optionalResult.status === 'failed') {
+      if (optionalResult.status === WorkStatus.Failed) {
         return { data: null, error: optionalResult.error?.message };
       }
       return { data: optionalResult.result };
@@ -290,7 +292,7 @@ const workflow = new Workflow<{ userId: string }>()
   });
 
 const result = await workflow.run({ userId: '123' });
-// result.status === 'completed' (workflow continues despite error)
+// result.status === WorkflowStatus.Completed (workflow continues despite error)
 ```
 
 ### Workflow Options
@@ -333,7 +335,7 @@ const workflow = new Workflow<{ userId: string }>({ failFast: false })
 // work3 WILL execute, but workflow still fails at the end
 
 const result = await workflow.run({ userId: '123' });
-// result.status === 'failed'
+// result.status === WorkflowStatus.Failed
 // result.error.message === 'Continue anyway' (first error)
 // result.context.workResults.get('work3')?.result === 'still runs'
 ```
@@ -359,7 +361,7 @@ const workflow = new Workflow<{ userId: string }>({ failFast: false })
   .serial({ name: 'final', execute: async () => 'done' });
 
 const result = await workflow.run({ userId: '123' });
-// result.status === 'completed' (all errors silenced)
+// result.status === WorkflowStatus.Completed (all errors silenced)
 ```
 
 ### `.run(initialData)`
@@ -374,7 +376,7 @@ const result = await workflow.run({ userId: '123' });
 
 ```typescript
 type WorkflowResult = {
-  status: WorkflowStatus; // 'completed' | 'failed'
+  status: WorkflowStatus; // WorkflowStatus.Completed | WorkflowStatus.Failed
   context: {
     data: TData; // Initial data passed to run()
     workResults: IWorkResultsMap; // Type-safe map of work results
@@ -386,7 +388,7 @@ type WorkflowResult = {
 
 // Each work result contains execution details
 type WorkResult<T> = {
-  status: WorkStatus; // 'completed' | 'failed' | 'skipped'
+  status: WorkStatus; // WorkStatus.Completed | WorkStatus.Failed | WorkStatus.Skipped
   result?: T; // The return value from execute()
   error?: Error; // Error if work failed
   duration: number; // Execution time in ms
@@ -400,14 +402,14 @@ type WorkResult<T> = {
 ```typescript
 // Get the full work result with metadata
 const workResult = ctx.workResults.get('fetchUser');
-console.log(workResult.status); // 'completed' | 'failed' | 'skipped'
+console.log(workResult.status); // WorkStatus.Completed | WorkStatus.Failed | WorkStatus.Skipped
 console.log(workResult.duration); // execution time in ms
 
 // Get just the return value
 const user = ctx.workResults.get('fetchUser').result;
 
 // Check status before accessing result
-if (workResult.status === 'completed') {
+if (workResult.status === WorkStatus.Completed) {
   console.log('User:', workResult.result);
 }
 ```
@@ -429,13 +431,13 @@ workflow.serial({
 });
 ```
 
-Skipped works are still accessible via `workResults.get()` with `status: 'skipped'`:
+Skipped works are still accessible via `workResults.get()` with `status: WorkStatus.Skipped`:
 
 ```typescript
 const emailResult = ctx.workResults.get('sendEmail');
-if (emailResult.status === 'skipped') {
+if (emailResult.status === WorkStatus.Skipped) {
   console.log('Email was skipped');
-} else if (emailResult.status === 'completed') {
+} else if (emailResult.status === WorkStatus.Completed) {
   console.log('Email sent:', emailResult.result);
 }
 ```

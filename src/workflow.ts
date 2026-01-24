@@ -10,6 +10,8 @@ import {
   SealingWorkDefinition,
   WorkflowOptions,
   ParallelWorksToRecord,
+  WorkStatus,
+  WorkflowStatus,
 } from './workflow.types';
 import { WorkInput, getWorkDefinition } from './work';
 
@@ -228,7 +230,7 @@ export class Workflow<
       // If failFast is false, check for collected errors
       if (collectedErrors.length > 0) {
         return {
-          status: 'failed',
+          status: WorkflowStatus.Failed,
           context,
           workResults,
           totalDuration: Date.now() - startTime,
@@ -237,14 +239,14 @@ export class Workflow<
       }
 
       return {
-        status: 'completed',
+        status: WorkflowStatus.Completed,
         context,
         workResults,
         totalDuration: Date.now() - startTime,
       };
     } catch (error) {
       return {
-        status: 'failed',
+        status: WorkflowStatus.Failed,
         context,
         workResults,
         totalDuration: Date.now() - startTime,
@@ -269,7 +271,7 @@ export class Workflow<
       const shouldRun = await work.shouldRun(context);
       if (!shouldRun) {
         const skippedResult: WorkResult = {
-          status: 'skipped',
+          status: WorkStatus.Skipped,
           duration: Date.now() - workStartTime,
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -283,7 +285,7 @@ export class Workflow<
       const result = await work.execute(context);
 
       const workResult: WorkResult = {
-        status: 'completed',
+        status: WorkStatus.Completed,
         result,
         duration: Date.now() - workStartTime,
       };
@@ -296,7 +298,7 @@ export class Workflow<
       const err = error instanceof Error ? error : new Error(String(error));
 
       const failedResult: WorkResult = {
-        status: 'failed',
+        status: WorkStatus.Failed,
         error: err,
         duration: Date.now() - workStartTime,
       };
@@ -334,7 +336,7 @@ export class Workflow<
         const shouldRun = await work.shouldRun(context);
         if (!shouldRun) {
           const skippedResult: WorkResult = {
-            status: 'skipped',
+            status: WorkStatus.Skipped,
             duration: Date.now() - workStartTime,
           };
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -368,7 +370,7 @@ export class Workflow<
 
       if ('error' in result && result.error) {
         const workResult: WorkResult = {
-          status: 'failed',
+          status: WorkStatus.Failed,
           error: result.error,
           duration,
         };
@@ -381,7 +383,7 @@ export class Workflow<
         }
       } else {
         const workResult: WorkResult = {
-          status: 'completed',
+          status: WorkStatus.Completed,
           result: result.result,
           duration,
         };
