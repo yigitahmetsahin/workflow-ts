@@ -165,7 +165,7 @@ console.log(step1Result.result); // the actual return value
 console.log(step1Result.duration); // execution time in ms
 
 // Option 3: Seal workflow to prevent modifications
-const sealed: ISealedWorkflow<TData, TWorkResults> = workflow.seal();
+const sealed: SealedWorkflow<TData, TWorkResults> = workflow.seal();
 sealed.name; // 'seal'
 sealed.works; // readonly array of work definitions
 sealed.options; // { failFast: true }

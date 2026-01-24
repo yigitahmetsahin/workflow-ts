@@ -6,8 +6,8 @@ import {
   IWorkDefinition,
   WorkResult,
   IWorkflow,
-  ISealedWorkflow,
-  ISealingWorkDefinition,
+  SealedWorkflow,
+  SealingWorkDefinition,
   WorkflowOptions,
   ParallelWorksToRecord,
 } from './workflow.types';
@@ -172,13 +172,13 @@ export class Workflow<
    * // sealed.serial(...) // Error: Property 'serial' does not exist
    * ```
    */
-  seal(): ISealedWorkflow<TData, TWorkResults>;
+  seal(): SealedWorkflow<TData, TWorkResults>;
   seal<TName extends string, TResult>(
-    sealingWork: ISealingWorkDefinition<TName, TData, TWorkResults, TResult>
-  ): ISealedWorkflow<TData, TWorkResults & { [K in TName]: TResult }>;
+    sealingWork: SealingWorkDefinition<TName, TData, TWorkResults, TResult>
+  ): SealedWorkflow<TData, TWorkResults & { [K in TName]: TResult }>;
   seal<TName extends string, TResult>(
-    sealingWork?: ISealingWorkDefinition<TName, TData, TWorkResults, TResult>
-  ): ISealedWorkflow<TData, TWorkResults & { [K in TName]: TResult }> {
+    sealingWork?: SealingWorkDefinition<TName, TData, TWorkResults, TResult>
+  ): SealedWorkflow<TData, TWorkResults & { [K in TName]: TResult }> {
     // If sealingWork is provided, add it as a final serial work
     if (sealingWork) {
       this._works.push({
@@ -193,7 +193,7 @@ export class Workflow<
       options: this._options,
       isSealed: () => this._sealed,
       run: this.run.bind(this),
-    } as ISealedWorkflow<TData, TWorkResults & { [K in TName]: TResult }>;
+    } as SealedWorkflow<TData, TWorkResults & { [K in TName]: TResult }>;
   }
 
   /**

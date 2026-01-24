@@ -186,7 +186,7 @@ const conditionalWork = new Work({
 
 ### `.seal(sealingWork?)`
 
-Seal the workflow to prevent further modifications. Returns an `ISealedWorkflow` that exposes `name`, `works`, `options`, `isSealed()`, and `run()`.
+Seal the workflow to prevent further modifications. Returns an `SealedWorkflow` that exposes `name`, `works`, `options`, `isSealed()`, and `run()`.
 
 ```typescript
 const sealed = new Workflow<{ userId: string }>()
@@ -222,7 +222,7 @@ This is useful when you want to:
 
 ```typescript
 // Example: Factory function that returns a sealed workflow
-function buildUserWorkflow(): ISealedWorkflow<{ userId: string }, { user: User }> {
+function buildUserWorkflow(): SealedWorkflow<{ userId: string }, { user: User }> {
   return new Workflow<{ userId: string }>()
     .serial({
       name: 'user',

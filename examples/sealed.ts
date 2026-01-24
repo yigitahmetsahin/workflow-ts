@@ -1,7 +1,7 @@
 /**
  * Sealed workflow example - Prevent modifications after construction
  */
-import { Workflow, ISealedWorkflow } from '../src';
+import { Workflow, SealedWorkflow } from '../src';
 
 interface UserData {
   userId: string;
@@ -16,7 +16,7 @@ type UserWorkResults = {
  * Factory function that returns a sealed workflow.
  * Once sealed, the workflow cannot be modified.
  */
-function buildUserWorkflow(): ISealedWorkflow<UserData, UserWorkResults> {
+function buildUserWorkflow(): SealedWorkflow<UserData, UserWorkResults> {
   return new Workflow<UserData>()
     .serial({
       name: 'validate',

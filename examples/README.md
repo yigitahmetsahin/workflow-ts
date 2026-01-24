@@ -108,6 +108,6 @@ Standalone work definitions demonstrating:
 Immutable workflow pattern demonstrating:
 
 - Using `.seal()` to prevent modifications
-- Factory functions that return `ISealedWorkflow`
+- Factory functions that return `SealedWorkflow`
 - Type-safe workflow distribution
 - Reusing sealed workflows with different data

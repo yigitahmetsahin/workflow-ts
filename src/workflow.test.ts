@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Workflow } from './workflow';
 import { Work } from './work';
-import { ISealedWorkflow } from './workflow.types';
+import { SealedWorkflow } from './workflow.types';
 
 describe('Workflow', () => {
   describe('serial execution', () => {
@@ -921,8 +921,8 @@ describe('Workflow', () => {
       expect(result.context.workResults.get('triple')?.result).toBe(30);
     });
 
-    it('should return type assignable to ISealedWorkflow', () => {
-      const sealed: ISealedWorkflow<{ value: number }, { double: number }> = new Workflow<{
+    it('should return type assignable to SealedWorkflow', () => {
+      const sealed: SealedWorkflow<{ value: number }, { double: number }> = new Workflow<{
         value: number;
       }>()
         .serial({
@@ -971,7 +971,7 @@ describe('Workflow', () => {
         })
         .seal();
 
-      // @ts-expect-error - serial doesn't exist on ISealedWorkflow
+      // @ts-expect-error - serial doesn't exist on SealedWorkflow
       expect(workflow.serial).toBeUndefined();
     });
 
@@ -983,7 +983,7 @@ describe('Workflow', () => {
         })
         .seal();
 
-      // @ts-expect-error - parallel doesn't exist on ISealedWorkflow
+      // @ts-expect-error - parallel doesn't exist on SealedWorkflow
       expect(workflow.parallel).toBeUndefined();
     });
 
