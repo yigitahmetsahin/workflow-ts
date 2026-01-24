@@ -1,7 +1,7 @@
 /**
  * Error handling workflow example
  */
-import { Workflow, WorkflowStatus } from '../src';
+import { Workflow } from '../src';
 
 interface PaymentData {
   amount: number;
@@ -55,7 +55,7 @@ async function main() {
   console.log('=== Test 1: Valid Visa card ===\n');
   let result = await workflow.run({ amount: 99.99, cardNumber: '4111111111111111' });
 
-  if (result.status === WorkflowStatus.COMPLETED) {
+  if (result.status === 'completed') {
     console.log('\n✅ Payment successful!');
     console.log('Transaction:', result.context.workResults.get('processPayment').result);
   } else {
@@ -66,7 +66,7 @@ async function main() {
   console.log('\n=== Test 2: Invalid card (MasterCard) ===\n');
   result = await workflow.run({ amount: 49.99, cardNumber: '5111111111111111' });
 
-  if (result.status === WorkflowStatus.COMPLETED) {
+  if (result.status === 'completed') {
     console.log('\n✅ Payment successful!');
   } else {
     console.log('\n❌ Workflow failed:', result.error?.message);

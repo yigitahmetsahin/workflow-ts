@@ -1,7 +1,7 @@
 /**
  * Work class example - Defining standalone, reusable work units
  */
-import { Workflow, Work, WorkflowStatus } from '../src';
+import { Workflow, Work } from '../src';
 
 interface UserData {
   userId: string;
@@ -76,7 +76,7 @@ async function main() {
   console.log('Running workflow with notifications enabled...\n');
   const result = await workflow.run({ userId: 'user-123', sendNotifications: true });
 
-  if (result.status === WorkflowStatus.COMPLETED) {
+  if (result.status === 'completed') {
     console.log('\n✅ Workflow completed!');
     console.log(`Total duration: ${result.totalDuration}ms`);
     console.log('Summary:', result.context.workResults.get('generateSummary').result);
@@ -90,7 +90,7 @@ async function main() {
 
   const simpleResult = await simpleWorkflow.run({ userId: 'user-456', sendNotifications: false });
 
-  if (simpleResult.status === WorkflowStatus.COMPLETED) {
+  if (simpleResult.status === 'completed') {
     console.log('\n✅ Simple workflow completed!');
     console.log('User:', simpleResult.context.workResults.get('fetchUser').result);
     console.log('Orders:', simpleResult.context.workResults.get('fetchOrders').result);

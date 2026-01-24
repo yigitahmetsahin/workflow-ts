@@ -1,23 +1,12 @@
 /**
  * Work Status
  */
-export enum WorkStatus {
-  PENDING = 'pending',
-  RUNNING = 'running',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-  SKIPPED = 'skipped',
-}
+export type WorkStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
 /**
  * Workflow Status
  */
-export enum WorkflowStatus {
-  PENDING = 'pending',
-  RUNNING = 'running',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-}
+export type WorkflowStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 /**
  * Context passed between workflow works
@@ -41,8 +30,8 @@ export interface IWorkResultsMap<
   TWorkResults extends Record<string, unknown> = Record<string, unknown>,
 > {
   /** Get a work result with compile-time type checking */
-  get<K extends keyof TWorkResults>(name: K): IWorkResult<TWorkResults[K]>;
-  set<K extends keyof TWorkResults>(name: K, value: IWorkResult<TWorkResults[K]>): void;
+  get<K extends keyof TWorkResults>(name: K): WorkResult<TWorkResults[K]>;
+  set<K extends keyof TWorkResults>(name: K, value: WorkResult<TWorkResults[K]>): void;
   /** Check if a work result exists */
   has(name: string): boolean;
 }
@@ -50,12 +39,12 @@ export interface IWorkResultsMap<
 /**
  * Result of a single work execution
  */
-export interface IWorkResult<TResult = unknown> {
+export type WorkResult<TResult = unknown> = {
   status: WorkStatus;
   result?: TResult;
   error?: Error;
   duration: number;
-}
+};
 
 /**
  * Definition of a work with inferred name and result type
@@ -86,25 +75,25 @@ export interface IWorkDefinition<
 /**
  * Internal work representation
  */
-export interface IWorkflowWork {
+export type WorkflowWork = {
   type: 'serial' | 'parallel';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   works: IWorkDefinition<string, any, any, any>[];
-}
+};
 
 /**
  * Result of workflow execution
  */
-export interface IWorkflowResult<
+export type WorkflowResult<
   TData = Record<string, unknown>,
   TWorkResults extends Record<string, unknown> = Record<string, unknown>,
-> {
+> = {
   status: WorkflowStatus;
   context: IWorkflowContext<TData, TWorkResults>;
-  workResults: Map<keyof TWorkResults, IWorkResult>;
+  workResults: Map<keyof TWorkResults, WorkResult>;
   totalDuration: number;
   error?: Error;
-}
+};
 
 /**
  * Interface for the Workflow class.
@@ -117,7 +106,7 @@ export interface IWorkflow<
   /**
    * The list of works in the workflow (readonly)
    */
-  readonly works: readonly IWorkflowWork[];
+  readonly works: readonly WorkflowWork[];
 
   /**
    * The workflow options (readonly)
@@ -157,7 +146,7 @@ export interface IWorkflow<
   /**
    * Execute the workflow with initial data
    */
-  run(initialData: TData): Promise<IWorkflowResult<TData, TWorkResults>>;
+  run(initialData: TData): Promise<WorkflowResult<TData, TWorkResults>>;
 }
 
 /**
@@ -185,7 +174,7 @@ export type ISealedWorkflow<
 /**
  * Options for configuring workflow behavior
  */
-export interface WorkflowOptions {
+export type WorkflowOptions = {
   /**
    * Whether to stop execution immediately when a work fails.
    * - true: Stop on first failure (default)
@@ -193,7 +182,7 @@ export interface WorkflowOptions {
    * @default true
    */
   failFast?: boolean;
-}
+};
 
 /**
  * Helper type to extract work results from parallel works array.

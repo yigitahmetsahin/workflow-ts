@@ -58,7 +58,7 @@ const workflow = new Workflow<{ userId: string }>()
     name: 'process',
     execute: async (ctx) => {
       // ✅ Types are automatically inferred!
-      // workResults.get() returns IWorkResult with status, result, duration
+      // workResults.get() returns WorkResult with status, result, duration
       const orders = ctx.workResults.get('fetchOrders').result; // { id: number }[]
       const profile = ctx.workResults.get('fetchProfile').result; // { name: string; email: string }
       return { orderCount: orders?.length ?? 0, userName: profile?.name };
@@ -80,7 +80,7 @@ const workflow2 = new Workflow<{ userId: string }>().serial(validateUser).parall
 
 const result = await workflow.run({ userId: 'user-123' });
 
-if (result.status === WorkflowStatus.COMPLETED) {
+if (result.status === 'completed') {
   console.log('Workflow completed in', result.totalDuration, 'ms');
   console.log('Final result:', result.context.workResults.get('process').result);
 }
@@ -256,7 +256,7 @@ const workflow = new Workflow<{ userId: string }>()
     execute: async (ctx) => {
       // Check if previous work failed
       const optionalResult = ctx.workResults.get('fetchOptionalData');
-      if (optionalResult.status === WorkStatus.FAILED) {
+      if (optionalResult.status === 'failed') {
         return { data: null, error: optionalResult.error?.message };
       }
       return { data: optionalResult.result };
@@ -264,7 +264,7 @@ const workflow = new Workflow<{ userId: string }>()
   });
 
 const result = await workflow.run({ userId: '123' });
-// result.status === WorkflowStatus.COMPLETED (workflow continues despite error)
+// result.status === 'completed' (workflow continues despite error)
 ```
 
 ### Workflow Options
@@ -307,7 +307,7 @@ const workflow = new Workflow<{ userId: string }>({ failFast: false })
 // work3 WILL execute, but workflow still fails at the end
 
 const result = await workflow.run({ userId: '123' });
-// result.status === WorkflowStatus.FAILED
+// result.status === 'failed'
 // result.error.message === 'Continue anyway' (first error)
 // result.context.workResults.get('work3')?.result === 'still runs'
 ```
@@ -333,7 +333,7 @@ const workflow = new Workflow<{ userId: string }>({ failFast: false })
   .serial({ name: 'final', execute: async () => 'done' });
 
 const result = await workflow.run({ userId: '123' });
-// result.status === WorkflowStatus.COMPLETED (all errors silenced)
+// result.status === 'completed' (all errors silenced)
 ```
 
 ### `.run(initialData)`
@@ -347,29 +347,29 @@ const result = await workflow.run({ userId: '123' });
 ### Result Object
 
 ```typescript
-interface IWorkflowResult {
+type WorkflowResult = {
   status: WorkflowStatus; // 'completed' | 'failed'
   context: {
     data: TData; // Initial data passed to run()
     workResults: IWorkResultsMap; // Type-safe map of work results
   };
-  workResults: Map<string, IWorkResult>; // Detailed results per work
+  workResults: Map<string, WorkResult>; // Detailed results per work
   totalDuration: number; // Total execution time in ms
   error?: Error; // Error if workflow failed
-}
+};
 
 // Each work result contains execution details
-interface IWorkResult<T> {
+type WorkResult<T> = {
   status: WorkStatus; // 'completed' | 'failed' | 'skipped'
   result?: T; // The return value from execute()
   error?: Error; // Error if work failed
   duration: number; // Execution time in ms
-}
+};
 ```
 
 ### Accessing Work Results
 
-`ctx.workResults.get()` returns an `IWorkResult` object, not the raw value:
+`ctx.workResults.get()` returns a `WorkResult` object, not the raw value:
 
 ```typescript
 // Get the full work result with metadata
@@ -381,7 +381,7 @@ console.log(workResult.duration); // execution time in ms
 const user = ctx.workResults.get('fetchUser').result;
 
 // Check status before accessing result
-if (workResult.status === WorkStatus.COMPLETED) {
+if (workResult.status === 'completed') {
   console.log('User:', workResult.result);
 }
 ```
@@ -407,9 +407,9 @@ Skipped works are still accessible via `workResults.get()` with `status: 'skippe
 
 ```typescript
 const emailResult = ctx.workResults.get('sendEmail');
-if (emailResult.status === WorkStatus.SKIPPED) {
+if (emailResult.status === 'skipped') {
   console.log('Email was skipped');
-} else if (emailResult.status === WorkStatus.COMPLETED) {
+} else if (emailResult.status === 'completed') {
   console.log('Email sent:', emailResult.result);
 }
 ```

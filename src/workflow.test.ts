@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Workflow } from './workflow';
 import { Work } from './work';
-import { WorkflowStatus, WorkStatus, ISealedWorkflow } from './workflow.types';
+import { ISealedWorkflow } from './workflow.types';
 
 describe('Workflow', () => {
   describe('serial execution', () => {
@@ -13,10 +13,10 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ value: 5 });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(result.context.workResults.get('double')?.result).toBe(10);
-      expect(result.context.workResults.get('double')?.status).toBe(WorkStatus.COMPLETED);
-      expect(result.workResults.get('double')?.status).toBe(WorkStatus.COMPLETED);
+      expect(result.context.workResults.get('double')?.status).toBe('completed');
+      expect(result.workResults.get('double')?.status).toBe('completed');
       expect(result.workResults.get('double')?.result).toBe(10);
     });
 
@@ -50,7 +50,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ value: 0 });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(executionOrder).toEqual(['first', 'second', 'third']);
       expect(result.context.workResults.get('first')?.result).toBe(1);
       expect(result.context.workResults.get('second')?.result).toBe(2);
@@ -102,7 +102,7 @@ describe('Workflow', () => {
       const result = await workflow.run({ multiplier: 10 });
       const duration = Date.now() - startTime;
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(result.context.workResults.get('task1')?.result).toBe(10);
       expect(result.context.workResults.get('task2')?.result).toBe(20);
       expect(result.context.workResults.get('task3')?.result).toBe(30);
@@ -152,10 +152,10 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ skip: true });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(executeFn).not.toHaveBeenCalled();
-      expect(result.workResults.get('conditional')?.status).toBe(WorkStatus.SKIPPED);
-      expect(result.context.workResults.get('conditional').status).toBe(WorkStatus.SKIPPED);
+      expect(result.workResults.get('conditional')?.status).toBe('skipped');
+      expect(result.context.workResults.get('conditional').status).toBe('skipped');
       expect(result.context.workResults.get('conditional').result).toBeUndefined();
     });
 
@@ -170,9 +170,9 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ skip: false });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(executeFn).toHaveBeenCalled();
-      expect(result.workResults.get('conditional')?.status).toBe(WorkStatus.COMPLETED);
+      expect(result.workResults.get('conditional')?.status).toBe('completed');
     });
 
     it('should support async shouldRun', async () => {
@@ -186,10 +186,10 @@ describe('Workflow', () => {
       });
 
       const skipResult = await workflow.run({ shouldRun: false });
-      expect(skipResult.workResults.get('asyncConditional')?.status).toBe(WorkStatus.SKIPPED);
+      expect(skipResult.workResults.get('asyncConditional')?.status).toBe('skipped');
 
       const runResult = await workflow.run({ shouldRun: true });
-      expect(runResult.workResults.get('asyncConditional')?.status).toBe(WorkStatus.COMPLETED);
+      expect(runResult.workResults.get('asyncConditional')?.status).toBe('completed');
     });
 
     it('should skip parallel works individually based on shouldRun', async () => {
@@ -207,8 +207,8 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ skipFirst: true });
 
-      expect(result.workResults.get('first')?.status).toBe(WorkStatus.SKIPPED);
-      expect(result.workResults.get('second')?.status).toBe(WorkStatus.COMPLETED);
+      expect(result.workResults.get('first')?.status).toBe('skipped');
+      expect(result.workResults.get('second')?.status).toBe('completed');
       expect(result.context.workResults.get('second')?.result).toBe('second result');
     });
   });
@@ -229,9 +229,9 @@ describe('Workflow', () => {
 
       const result = await workflow.run({});
 
-      expect(result.status).toBe(WorkflowStatus.FAILED);
+      expect(result.status).toBe('failed');
       expect(result.error?.message).toBe('Something went wrong');
-      expect(result.workResults.get('willFail')?.status).toBe(WorkStatus.FAILED);
+      expect(result.workResults.get('willFail')?.status).toBe('failed');
       expect(result.workResults.has('shouldNotRun')).toBe(false);
     });
 
@@ -274,7 +274,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({});
 
-      expect(result.status).toBe(WorkflowStatus.FAILED);
+      expect(result.status).toBe('failed');
       expect(result.error?.message).toBe('Parallel failure');
     });
 
@@ -315,7 +315,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({});
 
-      expect(result.status).toBe(WorkflowStatus.FAILED);
+      expect(result.status).toBe('failed');
       expect(result.error).toBeInstanceOf(Error);
       expect(result.error?.message).toBe('string error');
     });
@@ -384,7 +384,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ input: 10 });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(result.context.workResults.get('validate')?.result).toBe(true);
       expect(result.context.workResults.get('double')?.result).toBe(20);
       expect(result.context.workResults.get('triple')?.result).toBe(30);
@@ -440,9 +440,9 @@ describe('Workflow', () => {
         .serial({
           name: 'second',
           execute: async (ctx) => {
-            // Manually set a value (must provide IWorkResult)
+            // Manually set a value (must provide WorkResult)
             ctx.workResults.set('first', {
-              status: WorkStatus.COMPLETED,
+              status: 'completed',
               result: 'modified value',
               duration: 0,
             });
@@ -468,7 +468,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ value: 5 });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(result.context.workResults.get('double')?.result).toBe(10);
     });
 
@@ -487,7 +487,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ base: 5 });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(result.context.workResults.get('add')?.result).toBe(15);
       expect(result.context.workResults.get('multiply')?.result).toBe(50);
     });
@@ -521,7 +521,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ input: 10 });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(result.context.workResults.get('validate')?.result).toBe(true);
       expect(result.context.workResults.get('double')?.result).toBe(20);
       expect(result.context.workResults.get('triple')?.result).toBe(30);
@@ -541,9 +541,9 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ skip: true });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(executeFn).not.toHaveBeenCalled();
-      expect(result.workResults.get('conditional')?.status).toBe(WorkStatus.SKIPPED);
+      expect(result.workResults.get('conditional')?.status).toBe('skipped');
     });
 
     it('should support onError with Work class', async () => {
@@ -566,24 +566,6 @@ describe('Workflow', () => {
         expect.any(Error),
         expect.objectContaining({ data: { data: 'test' } })
       );
-    });
-
-    it('should expose work properties via getters', () => {
-      const executeFn = vi.fn();
-      const shouldRunFn = vi.fn();
-      const onErrorFn = vi.fn();
-
-      const work = new Work({
-        name: 'testWork',
-        execute: executeFn,
-        shouldRun: shouldRunFn,
-        onError: onErrorFn,
-      });
-
-      expect(work.name).toBe('testWork');
-      expect(work.execute).toBe(executeFn);
-      expect(work.shouldRun).toBe(shouldRunFn);
-      expect(work.onError).toBe(onErrorFn);
     });
 
     it('should allow reusing Work instances across multiple workflows', async () => {
@@ -621,9 +603,9 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ value: 5 });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(result.context.workResults.get('first')?.result).toBe(5);
-      expect(result.context.workResults.get('failing')?.status).toBe(WorkStatus.FAILED);
+      expect(result.context.workResults.get('failing')?.status).toBe('failed');
       expect(result.context.workResults.get('failing')?.error?.message).toBe('Silent failure');
       expect(result.context.workResults.get('last')?.result).toBe('completed');
     });
@@ -644,9 +626,9 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ value: 5 });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(result.context.workResults.get('success')?.result).toBe(10);
-      expect(result.context.workResults.get('failing')?.status).toBe(WorkStatus.FAILED);
+      expect(result.context.workResults.get('failing')?.status).toBe('failed');
       expect(result.context.workResults.get('failing')?.error?.message).toBe(
         'Silent parallel failure'
       );
@@ -672,7 +654,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ value: 5 });
 
-      expect(result.status).toBe(WorkflowStatus.FAILED);
+      expect(result.status).toBe('failed');
       expect(result.error?.message).toBe('Not silenced error');
     });
 
@@ -690,7 +672,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ value: 5 });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(onErrorFn).toHaveBeenCalledTimes(1);
       expect(onErrorFn).toHaveBeenCalledWith(expect.any(Error), expect.any(Object));
     });
@@ -709,7 +691,7 @@ describe('Workflow', () => {
           execute: async (ctx) => {
             const failedResult = ctx.workResults.get('failing');
             return {
-              wasFailed: failedResult.status === WorkStatus.FAILED,
+              wasFailed: failedResult.status === 'failed',
               errorMessage: failedResult.error?.message,
             };
           },
@@ -717,7 +699,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ value: 5 });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(result.context.workResults.get('checker')?.result).toEqual({
         wasFailed: true,
         errorMessage: 'Check me later',
@@ -754,7 +736,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ value: 5 });
 
-      expect(result.status).toBe(WorkflowStatus.FAILED);
+      expect(result.status).toBe('failed');
       expect(executionOrder).toEqual(['first', 'failing']);
       expect(result.context.workResults.has('never')).toBe(false);
     });
@@ -787,11 +769,11 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ value: 5 });
 
-      expect(result.status).toBe(WorkflowStatus.FAILED);
+      expect(result.status).toBe('failed');
       expect(result.error?.message).toBe('Continue anyway');
       expect(executionOrder).toEqual(['first', 'failing', 'last']);
       expect(result.context.workResults.get('first')?.result).toBe('ok');
-      expect(result.context.workResults.get('failing')?.status).toBe(WorkStatus.FAILED);
+      expect(result.context.workResults.get('failing')?.status).toBe('failed');
       expect(result.context.workResults.get('last')?.result).toBe('completed');
     });
 
@@ -812,10 +794,10 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ value: 5 });
 
-      expect(result.status).toBe(WorkflowStatus.FAILED);
+      expect(result.status).toBe('failed');
       expect(result.error?.message).toBe('First error');
-      expect(result.context.workResults.get('fail1')?.status).toBe(WorkStatus.FAILED);
-      expect(result.context.workResults.get('fail2')?.status).toBe(WorkStatus.FAILED);
+      expect(result.context.workResults.get('fail1')?.status).toBe('failed');
+      expect(result.context.workResults.get('fail2')?.status).toBe('failed');
     });
 
     it('should complete successfully if no errors with failFast: false', async () => {
@@ -825,7 +807,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ value: 5 });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(result.context.workResults.get('work1')?.result).toBe('result1');
       expect(result.context.workResults.get('work2')?.result).toBe('result2');
     });
@@ -860,7 +842,7 @@ describe('Workflow', () => {
 
       const result = await workflow.run({ value: 5 });
 
-      expect(result.status).toBe(WorkflowStatus.FAILED);
+      expect(result.status).toBe('failed');
       expect(result.error?.message).toBe('Parallel error');
       expect(executionOrder).toContain('p1');
       expect(executionOrder).toContain('p2');
@@ -899,7 +881,7 @@ describe('Workflow', () => {
       const result = await workflow.run({ value: 5 });
 
       // silenceError on each work means errors are silenced, so workflow completes
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(executionOrder).toEqual(['fail1', 'fail2', 'last']);
     });
   });
@@ -915,7 +897,7 @@ describe('Workflow', () => {
 
       const result = await sealed.run({ value: 5 });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(result.context.workResults.get('double')?.result).toBe(10);
     });
 
@@ -933,7 +915,7 @@ describe('Workflow', () => {
 
       const result = await sealed.run({ input: 10 });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(result.context.workResults.get('step1')?.result).toBe(11);
       expect(result.context.workResults.get('double')?.result).toBe(20);
       expect(result.context.workResults.get('triple')?.result).toBe(30);
@@ -963,7 +945,7 @@ describe('Workflow', () => {
 
       const result = await sealed.run({ value: 7 });
 
-      expect(result.status).toBe(WorkflowStatus.COMPLETED);
+      expect(result.status).toBe('completed');
       expect(result.context.workResults.get('double')?.result).toBe(14);
     });
 

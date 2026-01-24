@@ -19,6 +19,9 @@ npm test
 # Run tests in watch mode
 npm run test:watch
 
+# Run tests with coverage report
+npm run test:coverage
+
 # Lint, format, and type-check (auto-fixes issues)
 npm run lint
 
@@ -34,15 +37,24 @@ npm run lint:check
 - Use descriptive names for work definitions (e.g., `fetchUser`, `processData`)
 - Keep execute functions focused on a single responsibility
 
+### Interface vs Type Convention
+
+- **Use `interface`** for contracts that will be implemented by classes (e.g., `IWorkflow`, `IWorkDefinition`, `IWorkResultsMap`, `IWorkflowContext`)
+- **Use `type`** for data structures, return types, and type aliases that are not implemented (e.g., `WorkResult`, `WorkflowResult`, `WorkflowWork`, `WorkflowOptions`)
+- **Use string union types** instead of enums for status values (e.g., `type WorkStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'`)
+
+This distinction helps clarify intent: interfaces define behavior contracts, types define data shapes. String unions are preferred over enums for simplicity and better tree-shaking.
+
 ## Project Structure
 
 ```
 src/
 ├── index.ts           # Public exports
 ├── work.ts            # Work class for standalone work definitions
+├── work.test.ts       # Unit tests for Work class (Vitest)
 ├── workflow.ts        # Core Workflow class implementation
 ├── workflow.types.ts  # Type definitions
-└── workflow.test.ts   # Unit tests (Vitest)
+└── workflow.test.ts   # Unit tests for Workflow class (Vitest)
 ```
 
 ## Testing Instructions
@@ -146,7 +158,7 @@ const workflow2 = new Workflow<TData>()
 // Run workflow
 const result = await workflow.run(initialData);
 
-// Access results - workResults.get() returns IWorkResult, not raw value
+// Access results - workResults.get() returns WorkResult, not raw value
 const step1Result = result.context.workResults.get('step1');
 console.log(step1Result.status); // 'completed' | 'failed' | 'skipped'
 console.log(step1Result.result); // the actual return value

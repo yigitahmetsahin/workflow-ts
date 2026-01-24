@@ -1,12 +1,10 @@
 import {
   IWorkflowContext,
-  IWorkflowResult,
+  WorkflowResult,
   IWorkResultsMap,
-  WorkflowStatus,
-  IWorkflowWork,
+  WorkflowWork,
   IWorkDefinition,
-  IWorkResult,
-  WorkStatus,
+  WorkResult,
   IWorkflow,
   ISealedWorkflow,
   ISealingWorkDefinition,
@@ -21,19 +19,19 @@ import { WorkInput, getWorkDefinition } from './work';
 class WorkResultsMap<
   TWorkResults extends Record<string, unknown>,
 > implements IWorkResultsMap<TWorkResults> {
-  private map = new Map<keyof TWorkResults, IWorkResult<unknown>>();
+  private map = new Map<keyof TWorkResults, WorkResult<unknown>>();
 
-  get<K extends keyof TWorkResults>(name: K): IWorkResult<TWorkResults[K]> {
+  get<K extends keyof TWorkResults>(name: K): WorkResult<TWorkResults[K]> {
     const result = this.map.get(name);
     if (!result) {
       throw new Error(
         `Work result "${String(name)}" not found. This work may not have executed yet.`
       );
     }
-    return result as IWorkResult<TWorkResults[K]>;
+    return result as WorkResult<TWorkResults[K]>;
   }
 
-  set<K extends keyof TWorkResults>(name: K, value: IWorkResult<TWorkResults[K]>): void {
+  set<K extends keyof TWorkResults>(name: K, value: WorkResult<TWorkResults[K]>): void {
     this.map.set(name, value);
   }
 
@@ -81,7 +79,7 @@ export class Workflow<
   TData = Record<string, unknown>,
   TWorkResults extends Record<string, unknown> = NonNullable<unknown>,
 > implements IWorkflow<TData, TWorkResults> {
-  private _works: IWorkflowWork[] = [];
+  private _works: WorkflowWork[] = [];
   private _options: Required<WorkflowOptions>;
   private _sealed = false;
 
@@ -92,7 +90,7 @@ export class Workflow<
   /**
    * The list of works in the workflow (readonly)
    */
-  get works(): readonly IWorkflowWork[] {
+  get works(): readonly WorkflowWork[] {
     return this._works;
   }
 
@@ -194,13 +192,13 @@ export class Workflow<
   /**
    * Execute the workflow with initial data
    */
-  async run(initialData: TData): Promise<IWorkflowResult<TData, TWorkResults>> {
+  async run(initialData: TData): Promise<WorkflowResult<TData, TWorkResults>> {
     const startTime = Date.now();
     const context: IWorkflowContext<TData, TWorkResults> = {
       data: initialData,
       workResults: new WorkResultsMap<TWorkResults>(),
     };
-    const workResults = new Map<keyof TWorkResults, IWorkResult>();
+    const workResults = new Map<keyof TWorkResults, WorkResult>();
     const collectedErrors: Error[] = [];
 
     try {
@@ -223,7 +221,7 @@ export class Workflow<
       // If failFast is false, check for collected errors
       if (collectedErrors.length > 0) {
         return {
-          status: WorkflowStatus.FAILED,
+          status: 'failed',
           context,
           workResults,
           totalDuration: Date.now() - startTime,
@@ -232,14 +230,14 @@ export class Workflow<
       }
 
       return {
-        status: WorkflowStatus.COMPLETED,
+        status: 'completed',
         context,
         workResults,
         totalDuration: Date.now() - startTime,
       };
     } catch (error) {
       return {
-        status: WorkflowStatus.FAILED,
+        status: 'failed',
         context,
         workResults,
         totalDuration: Date.now() - startTime,
@@ -255,7 +253,7 @@ export class Workflow<
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     work: IWorkDefinition<string, TData, any, any>,
     context: IWorkflowContext<TData, TWorkResults>,
-    workResults: Map<keyof TWorkResults, IWorkResult>
+    workResults: Map<keyof TWorkResults, WorkResult>
   ): Promise<void> {
     const workStartTime = Date.now();
 
@@ -263,8 +261,8 @@ export class Workflow<
     if (work.shouldRun) {
       const shouldRun = await work.shouldRun(context);
       if (!shouldRun) {
-        const skippedResult: IWorkResult = {
-          status: WorkStatus.SKIPPED,
+        const skippedResult: WorkResult = {
+          status: 'skipped',
           duration: Date.now() - workStartTime,
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -277,8 +275,8 @@ export class Workflow<
     try {
       const result = await work.execute(context);
 
-      const workResult: IWorkResult = {
-        status: WorkStatus.COMPLETED,
+      const workResult: WorkResult = {
+        status: 'completed',
         result,
         duration: Date.now() - workStartTime,
       };
@@ -290,8 +288,8 @@ export class Workflow<
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
 
-      const failedResult: IWorkResult = {
-        status: WorkStatus.FAILED,
+      const failedResult: WorkResult = {
+        status: 'failed',
         error: err,
         duration: Date.now() - workStartTime,
       };
@@ -319,7 +317,7 @@ export class Workflow<
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     works: IWorkDefinition<string, TData, any, any>[],
     context: IWorkflowContext<TData, TWorkResults>,
-    workResults: Map<keyof TWorkResults, IWorkResult>
+    workResults: Map<keyof TWorkResults, WorkResult>
   ): Promise<void> {
     const promises = works.map(async (work) => {
       const workStartTime = Date.now();
@@ -328,8 +326,8 @@ export class Workflow<
       if (work.shouldRun) {
         const shouldRun = await work.shouldRun(context);
         if (!shouldRun) {
-          const skippedResult: IWorkResult = {
-            status: WorkStatus.SKIPPED,
+          const skippedResult: WorkResult = {
+            status: 'skipped',
             duration: Date.now() - workStartTime,
           };
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -362,8 +360,8 @@ export class Workflow<
       const duration = Date.now() - result.startTime!;
 
       if ('error' in result && result.error) {
-        const workResult: IWorkResult = {
-          status: WorkStatus.FAILED,
+        const workResult: WorkResult = {
+          status: 'failed',
           error: result.error,
           duration,
         };
@@ -375,8 +373,8 @@ export class Workflow<
           errors.push({ work: result.work, error: result.error });
         }
       } else {
-        const workResult: IWorkResult = {
-          status: WorkStatus.COMPLETED,
+        const workResult: WorkResult = {
+          status: 'completed',
           result: result.result,
           duration,
         };

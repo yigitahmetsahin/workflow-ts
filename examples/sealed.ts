@@ -1,7 +1,7 @@
 /**
  * Sealed workflow example - Prevent modifications after construction
  */
-import { Workflow, WorkflowStatus, ISealedWorkflow } from '../src';
+import { Workflow, ISealedWorkflow } from '../src';
 
 interface UserData {
   userId: string;
@@ -60,7 +60,7 @@ async function main() {
   console.log('\nRunning sealed workflow...\n');
   const result = await userWorkflow.run({ userId: 'user-123' });
 
-  if (result.status === WorkflowStatus.COMPLETED) {
+  if (result.status === 'completed') {
     console.log('\n✅ Workflow completed!');
     console.log(`Total duration: ${result.totalDuration}ms`);
     console.log('User:', result.context.workResults.get('fetchUser').result);
@@ -70,7 +70,7 @@ async function main() {
   console.log('\n--- Second Run ---\n');
   const result2 = await userWorkflow.run({ userId: 'user-456' });
 
-  if (result2.status === WorkflowStatus.COMPLETED) {
+  if (result2.status === 'completed') {
     console.log('✅ Second run completed!');
     console.log('User:', result2.context.workResults.get('fetchUser').result);
   }

@@ -1,7 +1,7 @@
 /**
  * Parallel workflow example - Concurrent execution
  */
-import { Workflow, WorkflowStatus } from '../src';
+import { Workflow } from '../src';
 
 interface OrderData {
   orderId: string;
@@ -68,7 +68,7 @@ async function main() {
 
   const result = await workflow.run({ orderId: 'ORD-001', userId: 'user-456' });
 
-  if (result.status === WorkflowStatus.COMPLETED) {
+  if (result.status === 'completed') {
     console.log('\n✅ Order processed!');
     console.log(`Total duration: ${result.totalDuration}ms`);
     console.log(`(Parallel tasks saved ~${200 + 150 + 100 - 200}ms by running concurrently)`);

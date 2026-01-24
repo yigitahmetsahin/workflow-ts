@@ -17,10 +17,10 @@ npx tsx examples/sealed.ts
 
 ## Key API Pattern
 
-All examples use the `IWorkResult` pattern for accessing work results:
+All examples use the `WorkResult` pattern for accessing work results:
 
 ```typescript
-// workResults.get() returns IWorkResult with status, result, duration
+// workResults.get() returns WorkResult with status, result, duration
 const userResult = ctx.workResults.get('fetchUser');
 
 // Access the actual value via .result
@@ -30,9 +30,9 @@ const user = userResult.result;
 const user = ctx.workResults.get('fetchUser').result;
 
 // Check execution status
-if (userResult.status === WorkStatus.COMPLETED) {
+if (userResult.status === 'completed') {
   console.log('User fetched:', userResult.result);
-} else if (userResult.status === WorkStatus.SKIPPED) {
+} else if (userResult.status === 'skipped') {
   console.log('User fetch was skipped');
 }
 ```
@@ -90,7 +90,7 @@ Error handling demonstrating:
 
 - `onError` callbacks for logging/alerting
 - Workflow failure states
-- Accessing error details via `IWorkResult.error`
+- Accessing error details via `WorkResult.error`
 - Error recovery patterns
 
 ### 5. Work Class (`work-class.ts`)
