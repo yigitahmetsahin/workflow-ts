@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [5.1.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v5.0.0...v5.1.0) (2026-01-25)
+
+
+### Features
+
+* always call onError immediately regardless of failFast ([a33d2b7](https://github.com/yigitahmetsahin/workflow-ts/commit/a33d2b71568f9f98c436d27722e7915dd3cde0b2))
+
 ## [5.0.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v4.1.0...v5.0.0) (2026-01-25)
 
 
