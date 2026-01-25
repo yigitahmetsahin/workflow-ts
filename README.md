@@ -1,13 +1,13 @@
-# @yigitahmetsahin/workflow-ts
+# @yigitahmetsahin/work-tree
 
 A simple, extensible TypeScript workflow engine supporting serial and parallel work execution with full type inference.
 
-[![npm version](https://img.shields.io/npm/v/@yigitahmetsahin/workflow-ts.svg)](https://www.npmjs.com/package/@yigitahmetsahin/workflow-ts)
-[![npm downloads](https://img.shields.io/npm/dm/@yigitahmetsahin/workflow-ts.svg)](https://www.npmjs.com/package/@yigitahmetsahin/workflow-ts)
-[![CI](https://github.com/yigitahmetsahin/workflow-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/yigitahmetsahin/workflow-ts/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/@yigitahmetsahin/work-tree.svg)](https://www.npmjs.com/package/@yigitahmetsahin/work-tree)
+[![npm downloads](https://img.shields.io/npm/dm/@yigitahmetsahin/work-tree.svg)](https://www.npmjs.com/package/@yigitahmetsahin/work-tree)
+[![CI](https://github.com/yigitahmetsahin/work-tree/actions/workflows/ci.yml/badge.svg)](https://github.com/yigitahmetsahin/work-tree/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/node/v/@yigitahmetsahin/workflow-ts.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/node/v/@yigitahmetsahin/work-tree.svg)](https://nodejs.org/)
 
 ## Features
 
@@ -23,21 +23,21 @@ A simple, extensible TypeScript workflow engine supporting serial and parallel w
 ## Installation
 
 ```bash
-npm install @yigitahmetsahin/workflow-ts
+npm install @yigitahmetsahin/work-tree
 ```
 
 ```bash
-yarn add @yigitahmetsahin/workflow-ts
+yarn add @yigitahmetsahin/work-tree
 ```
 
 ```bash
-pnpm add @yigitahmetsahin/workflow-ts
+pnpm add @yigitahmetsahin/work-tree
 ```
 
 ## Quick Start
 
 ```typescript
-import { Work, WorkStatus } from '@yigitahmetsahin/workflow-ts';
+import { Work, WorkStatus } from '@yigitahmetsahin/work-tree';
 
 // Build a tree with serial and parallel steps
 const tree = Work.tree('userDashboard')

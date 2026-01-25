@@ -1,5 +1,5 @@
 {
-  "name": "@yigitahmetsahin/workflow-ts",
+  "name": "@yigitahmetsahin/work-tree",
   "version": "6.0.0",
   "description": "A simple, extensible TypeScript workflow engine supporting serial and parallel work execution with full type inference",
   "main": "dist/index.js",
@@ -40,12 +40,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yigitahmetsahin/workflow-ts.git"
+    "url": "git+https://github.com/yigitahmetsahin/work-tree.git"
   },
   "bugs": {
-    "url": "https://github.com/yigitahmetsahin/workflow-ts/issues"
+    "url": "https://github.com/yigitahmetsahin/work-tree/issues"
   },
-  "homepage": "https://github.com/yigitahmetsahin/workflow-ts#readme",
+  "homepage": "https://github.com/yigitahmetsahin/work-tree#readme",
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "@types/node": "^25.0.10",

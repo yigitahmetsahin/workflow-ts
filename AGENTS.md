@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-A TypeScript workflow engine library supporting serial and parallel work execution with full type inference. Published to npm as `@yigitahmetsahin/workflow-ts`.
+A TypeScript workflow engine library supporting serial and parallel work execution with full type inference. Published to npm as `@yigitahmetsahin/work-tree`.
 
 ## Setup Commands
 

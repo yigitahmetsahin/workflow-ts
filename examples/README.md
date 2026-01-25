@@ -1,6 +1,6 @@
 # Examples
 
-This folder contains practical examples of using `@yigitahmetsahin/workflow-ts`.
+This folder contains practical examples of using `@yigitahmetsahin/work-tree`.
 
 ## Running Examples
 
@@ -21,7 +21,7 @@ npx tsx examples/sealed.ts
 All examples use the `Work.tree()` API for building and running workflows:
 
 ```typescript
-import { Work, WorkStatus } from '@yigitahmetsahin/workflow-ts';
+import { Work, WorkStatus } from '@yigitahmetsahin/work-tree';
 
 // Build a tree with serial and parallel steps
 const tree = Work.tree('myTree')
