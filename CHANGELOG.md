@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [6.1.0](https://github.com/yigitahmetsahin/work-tree/compare/v6.0.0...v6.1.0) (2026-01-25)
+
+
+### Features
+
+* **examples:** add minimal quick-start example ([1f2fff2](https://github.com/yigitahmetsahin/work-tree/commit/1f2fff2aba2c6ad9d923c884822188ccf1e6102c))
+
 ## [6.0.0](https://github.com/yigitahmetsahin/work-tree/compare/v5.2.0...v6.0.0) (2026-01-25)
 
 
