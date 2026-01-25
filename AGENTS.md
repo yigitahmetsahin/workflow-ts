@@ -39,9 +39,9 @@ npm run lint:check
 
 ### Interface vs Type Convention
 
-- **Use `interface`** for contracts that will be implemented by classes (e.g., `IWorkflow`, `IWorkDefinition`, `IWorkResultsMap`, `IWorkflowContext`)
-- **Use `type`** for data structures, return types, and type aliases that are not implemented (e.g., `WorkResult`, `WorkflowResult`, `WorkflowWork`, `WorkflowOptions`)
-- **Use enums** for status values (e.g., `enum WorkStatus { Pending = 'pending', Running = 'running', ... }`)
+- **Use `interface`** for contracts that will be implemented by classes (e.g., `IWorkDefinition`, `ITreeWorkDefinition`, `IWorkResultsMap`, `IRunnableTreeWork`)
+- **Use `type`** for data structures, return types, and type aliases that are not implemented (e.g., `WorkResult`, `TreeResult`, `WorkflowContext`, `SealedTreeWork`, `WorkBehaviorOptions`, `TreeWorkStep`)
+- **Use enums** for status values (e.g., `enum WorkStatus { Completed = 'completed', Failed = 'failed', Skipped = 'skipped' }`)
 
 This distinction helps clarify intent: interfaces define behavior contracts, types define data shapes. Enums provide type safety and prevent `@typescript-eslint/no-unsafe-enum-comparison` errors in consuming projects.
 
@@ -50,29 +50,13 @@ This distinction helps clarify intent: interfaces define behavior contracts, typ
 ```
 src/
 ├── index.ts            # Public exports
-├── type-guards.ts      # Type guard functions (isGroupWorkDefinition)
-├── work.ts             # Work class for standalone work definitions
-├── work.types.ts       # Work-related type definitions (WorkStatus, WorkResult, IWorkDefinition, etc.)
+├── type-guards.ts      # Type guard functions (isTreeWorkDefinition)
+├── work.ts             # Work and TreeWork classes
+├── work.types.ts       # All type definitions (WorkStatus, WorkResult, IWorkDefinition, etc.)
 ├── work.test.ts        # Unit tests for Work class (Vitest)
-├── work-results-map.ts # Internal WorkResultsMap implementation
-├── workflow.ts         # Core Workflow class implementation
-├── workflow.types.ts   # Workflow-related type definitions (IWorkflow, WorkflowResult, etc.)
-└── workflow.test.ts    # Unit tests for Workflow class (Vitest)
+├── work-results-map.ts   # Internal WorkResultsMap implementation
+└── tree-work.test.ts     # Unit tests for TreeWork (Vitest)
 ```
-
-### Avoiding Circular Dependencies
-
-Type files are split to prevent circular imports:
-
-- **work.types.ts** → imports `IWorkflowContext` from workflow.types.ts
-- **workflow.types.ts** → imports work types from work.types.ts
-
-Rules to maintain this:
-
-1. **Never re-export** types from one file through another - import directly from the source
-2. **Keep runtime code separate** from type definitions (e.g., type guards belong in implementation files)
-3. **Use `import type`** when only types are needed (helps bundlers and avoids runtime cycles)
-4. When adding new types, consider which file they belong to based on their primary concern (work vs workflow)
 
 ## Testing Instructions
 
@@ -182,119 +166,96 @@ Examples:
 ## Key Types
 
 ```typescript
-// Option 1: Inline work definitions
-// Options: { failFast?: boolean }
-const workflow = new Workflow<TData>() // or new Workflow<TData>({ failFast: false })
-  .serial({ name: 'step1', execute: async (ctx) => value })
-  .parallel([
+// Build a tree with serial and parallel steps
+const tree = Work.tree('myTree')
+  .addSerial({ name: 'step1', execute: async (ctx) => value })
+  .addParallel([
     { name: 'parallel1', execute: async (ctx) => value1 },
     { name: 'parallel2', execute: async (ctx) => value2 },
-  ]);
+  ])
+  .addSerial({
+    name: 'step2',
+    execute: async (ctx) => {
+      // Access previous work results
+      const step1 = ctx.workResults.get('step1').result;
+      return step1;
+    },
+  });
 
-// Option 2: Standalone Work instances (reusable)
+// Standalone Work instances (reusable)
 const myWork = new Work({
   name: 'myWork',
   execute: async (ctx) => value,
   shouldRun: (ctx) => true, // optional
   onError: (error, ctx) => {}, // optional
-  silenceError: true, // optional - don't fail workflow on error
+  silenceError: true, // optional - don't fail tree on error
 });
 
-const workflow2 = new Workflow<TData>()
-  .serial(myWork) // Work instance
-  .parallel([work1, work2]); // Work instances or inline definitions can be mixed
+// Use Work instances in trees
+const tree2 = Work.tree('tree2').addSerial(myWork).addParallel([work1, work2]);
 
-// Option 3: Nested groups in parallel (tree-like workflows)
-// TYPE INFERENCE: Supports up to 5 levels of nesting - all work names and result types are inferred!
-const workflow3 = new Workflow<TData>().parallel([
-  // Serial group - works execute in sequence within this branch
-  {
-    name: 'addressCollection',
-    serial: [
-      { name: 'collectPrimary', execute: async (ctx) => primary, silenceError: true },
-      {
-        name: 'collectFallback',
-        // For sibling works, use has() + Map access (siblings aren't known at compile time)
-        shouldRun: (ctx) => {
-          if (ctx.workResults.has('collectPrimary')) {
-            const result = (ctx.workResults as unknown as Map<string, { status: WorkStatus }>).get(
-              'collectPrimary'
-            );
-            return result?.status === WorkStatus.Failed;
-          }
-          return false;
-        },
-        execute: async (ctx) => fallback,
-      },
-    ],
-    // Groups support: shouldRun, onError, silenceError
-  },
-  // Parallel group - works execute concurrently within this branch
-  {
-    name: 'dataFetch',
-    parallel: [
-      { name: 'fetchOrders', execute: async (ctx) => orders },
-      { name: 'fetchProfile', execute: async (ctx) => profile },
-    ],
-  },
-  // Regular work - runs in parallel with the groups
-  { name: 'fetchHistory', execute: async (ctx) => history },
-]);
+// Nested trees
+const innerTree = Work.tree('inner').addSerial({
+  name: 'innerStep',
+  execute: async () => 'a',
+});
 
-// NOTE: Works have `execute`, Groups have `serial` OR `parallel` (mutually exclusive)
-// You cannot have both `execute` and `serial`/`parallel` on the same definition
+const outerTree = Work.tree('outer')
+  .addSerial(innerTree)
+  .addSerial({
+    name: 'afterInner',
+    execute: async (ctx) => {
+      // Access inner tree's work results!
+      const inner = ctx.workResults.get('innerStep').result;
+      return inner;
+    },
+  });
 
-// Run workflow
-const result = await workflow.run(initialData);
+// Tree-level options
+const conditionalTree = Work.tree('conditional', {
+  failFast: true, // Stop on first error (default: true)
+  shouldRun: (ctx) => ctx.data.isEnabled, // Skip entire tree
+  silenceError: true, // Don't fail parent on error
+  onError: (error, ctx) => {}, // Handle tree errors
+}).addSerial({ name: 'work', execute: async () => 'result' });
+
+// Seal tree to prevent modifications
+const sealed = tree.seal();
+// sealed.addSerial(...) // TypeScript error - no such method
+
+// Seal with final work
+const sealedWithFinal = tree.seal({
+  name: 'finalize',
+  execute: async (ctx) => 'done',
+});
+
+// Check tree state
+tree.isSealed(); // boolean
+tree.options; // { failFast: boolean }
+
+// Run tree directly
+const result = await tree.run(initialData);
 
 // Access results - workResults.get() returns WorkResult, not raw value
 const step1Result = result.context.workResults.get('step1');
 console.log(step1Result.status); // WorkStatus.Completed | WorkStatus.Failed | WorkStatus.Skipped
 console.log(step1Result.result); // the actual return value
 console.log(step1Result.duration); // execution time in ms
-console.log(step1Result.parent); // parent group name (if nested), or undefined
+console.log(step1Result.parent); // parent tree name (if nested), or undefined
 
-// All nested works are accessible at top level with full type inference (up to 5 levels)
-const primary = result.context.workResults.get('collectPrimary'); // parent: 'addressCollection'
-const orders = result.context.workResults.get('fetchOrders'); // parent: 'dataFetch'
-const history = result.context.workResults.get('fetchHistory'); // parent: undefined
-
-// Group results
-// Serial group: result is last inner work's return value
-// Parallel group: result is object { workName: result, ... }
-const groupResult = result.context.workResults.get('dataFetch').result;
-// { fetchOrders: orders, fetchProfile: profile }
-
-// Option 4: Seal workflow to prevent modifications
-const sealed: SealedWorkflow<TData, TWorkResults> = workflow.seal();
-sealed.name; // 'seal'
-sealed.works; // readonly array of work definitions
-sealed.options; // { failFast: true }
-sealed.isSealed(); // true
-await sealed.run(initialData); // Execute the workflow
-// sealed.serial(...) - TypeScript error! Method doesn't exist
-// sealed.parallel(...) - TypeScript error! Method doesn't exist
-
-// Option 5: Seal with a final work (executes after all previous works)
-const sealedWithWork = workflow.seal({
-  name: 'finalize', // required
-  execute: async (ctx) => {
-    // Access results from previous works
-    const result = ctx.workResults.get('step1').result;
-    return `Final: ${result}`;
-  },
-  shouldRun: (ctx) => true, // optional
-  onError: (error, ctx) => {}, // optional
-  silenceError: false, // optional
-});
-// The seal work runs as a final serial work
+// Check tree status
+if (result.status === WorkStatus.Completed) {
+  console.log('Success!', result.totalDuration);
+} else {
+  console.log('Failed:', result.error);
+}
 ```
 
 ## Documentation & Testing Requirements
 
 When making code changes, **ALWAYS keep the following up to date**:
 
-1. **Unit Tests** (`src/workflow.test.ts`)
+1. **Unit Tests** (`src/tree-work.test.ts`)
    - Add tests for new features or bug fixes
    - Update existing tests when API changes
 

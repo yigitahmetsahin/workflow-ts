@@ -1,5 +1,4 @@
-import type { IWorkResultsMap } from './workflow.types';
-import type { WorkResult } from './work.types';
+import type { IWorkResultsMap, WorkResult } from './work.types';
 
 /**
  * Internal implementation of IWorkResultsMap using a Map
@@ -7,10 +6,10 @@ import type { WorkResult } from './work.types';
 export class WorkResultsMap<
   TWorkResults extends Record<string, unknown>,
 > implements IWorkResultsMap<TWorkResults> {
-  private map = new Map<keyof TWorkResults, WorkResult<unknown>>();
+  constructor(private map: Map<string, WorkResult<unknown>> = new Map()) {}
 
   get<K extends keyof TWorkResults>(name: K): WorkResult<TWorkResults[K]> {
-    const result = this.map.get(name);
+    const result = this.map.get(name as string);
     if (!result) {
       throw new Error(
         `Work result "${String(name)}" not found. This work may not have executed yet.`
@@ -20,10 +19,10 @@ export class WorkResultsMap<
   }
 
   set<K extends keyof TWorkResults>(name: K, value: WorkResult<TWorkResults[K]>): void {
-    this.map.set(name, value);
+    this.map.set(name as string, value);
   }
 
   has<K extends keyof TWorkResults>(name: K): boolean {
-    return this.map.has(name);
+    return this.map.has(name as string);
   }
 }

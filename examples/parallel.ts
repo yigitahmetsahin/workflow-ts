@@ -1,16 +1,11 @@
 /**
- * Parallel workflow example - Concurrent execution
+ * Parallel example - Concurrent execution with Work.tree()
  */
-import { Workflow } from '../src';
-
-interface OrderData {
-  orderId: string;
-  userId: string;
-}
+import { Work, WorkStatus } from '../src';
 
 async function main() {
-  const workflow = new Workflow<OrderData>()
-    .serial({
+  const tree = Work.tree('orderProcessing')
+    .addSerial({
       name: 'validateOrder',
       execute: async (ctx) => {
         console.log(`Validating order: ${ctx.data.orderId}`);
@@ -19,7 +14,7 @@ async function main() {
       },
     })
     // These three tasks run in parallel
-    .parallel([
+    .addParallel([
       {
         name: 'fetchUserProfile',
         execute: async (ctx) => {
@@ -45,7 +40,7 @@ async function main() {
         },
       },
     ])
-    .serial({
+    .addSerial({
       name: 'processOrder',
       execute: async (ctx) => {
         const user = ctx.workResults.get('fetchUserProfile').result;
@@ -64,11 +59,11 @@ async function main() {
       },
     });
 
-  console.log('Starting order workflow...\n');
+  console.log('Starting order tree...\n');
 
-  const result = await workflow.run({ orderId: 'ORD-001', userId: 'user-456' });
+  const result = await tree.run({ orderId: 'ORD-001', userId: 'user-456' });
 
-  if (result.status === 'completed') {
+  if (result.status === WorkStatus.Completed) {
     console.log('\n✅ Order processed!');
     console.log(`Total duration: ${result.totalDuration}ms`);
     console.log(`(Parallel tasks saved ~${200 + 150 + 100 - 200}ms by running concurrently)`);

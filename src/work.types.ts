@@ -2,8 +2,6 @@
  * Work Status
  */
 export enum WorkStatus {
-  Pending = 'pending',
-  Running = 'running',
   Completed = 'completed',
   Failed = 'failed',
   Skipped = 'skipped',
@@ -17,119 +15,189 @@ export type WorkResult<TResult = unknown> = {
   result?: TResult;
   error?: Error;
   duration: number;
-  /** Parent group work name, if this work is part of a group */
+  /** Parent work name, if this work is nested inside a tree work */
   parent?: string;
 };
 
-// Forward declaration for circular reference
+/**
+ * Type-safe map for work results with automatic type inference
+ */
+export interface IWorkResultsMap<
+  TWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> {
+  /** Get a work result with compile-time type checking */
+  get<K extends keyof TWorkResults>(name: K): WorkResult<TWorkResults[K]>;
+  set<K extends keyof TWorkResults>(name: K, value: WorkResult<TWorkResults[K]>): void;
+  /** Check if a work result exists */
+  has(name: string): boolean;
+}
 
-export type ParallelInput<
+/**
+ * Context passed to work execute functions
+ */
+export type WorkflowContext<
+  TData = Record<string, unknown>,
+  TWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  /** Shared data between works */
+  data: TData;
+  /** Work-specific results keyed by work name with inferred types */
+  workResults: IWorkResultsMap<TWorkResults>;
+};
+
+/**
+ * Result of tree execution
+ */
+export type TreeResult<
+  TData = Record<string, unknown>,
+  TWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  status: WorkStatus;
+  context: WorkflowContext<TData, TWorkResults>;
+  workResults: Map<keyof TWorkResults, WorkResult>;
+  totalDuration: number;
+  error?: Error;
+};
+
+// ============================================================================
+// Unified Work Types
+// ============================================================================
+
+/**
+ * Common behavior options for works and trees (shouldRun, onError, silenceError)
+ */
+export type WorkBehaviorOptions<
+  TData = Record<string, unknown>,
+  TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  /** Optional: condition to determine if work should run */
+  shouldRun?: (
+    context: WorkflowContext<TData, TAvailableWorkResults>
+  ) => boolean | Promise<boolean>;
+  /** Optional: called when work fails */
+  onError?: (
+    error: Error,
+    context: WorkflowContext<TData, TAvailableWorkResults>
+  ) => void | Promise<void>;
+  /** Optional: if true, errors won't stop the workflow */
+  silenceError?: boolean;
+};
+
+/**
+ * Input type for parallel/serial - can be a leaf work or tree work
+ */
+export type WorkInput<
   TName extends string,
   TData = Record<string, unknown>,
   TResult = unknown,
   TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
 > =
   | IWorkDefinition<TName, TData, TResult, TAvailableWorkResults>
-  | IGroupWorkDefinition<TName, TData, TAvailableWorkResults>;
+  | ITreeWorkDefinition<TName, TData, TAvailableWorkResults>;
 
 /**
- * Definition of a work with inferred name and result type
- * Works have `execute` and cannot have `serial`/`parallel` (those are for groups)
+ * Definition of a leaf work with inferred name and result type.
+ * Leaf works have `execute` and cannot have tree structure.
  */
 export interface IWorkDefinition<
   TName extends string,
   TData = Record<string, unknown>,
   TResult = unknown,
   TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
-> {
+> extends WorkBehaviorOptions<TData, TAvailableWorkResults> {
   /** Unique name for the work */
   name: TName;
   /** Execute function - receives context and returns result */
-  execute: (context: IWorkflowContext<TData, TAvailableWorkResults>) => Promise<TResult>;
-  /** Optional: condition to determine if work should run */
-  shouldRun?: (
-    context: IWorkflowContext<TData, TAvailableWorkResults>
-  ) => boolean | Promise<boolean>;
-  /** Optional: called when work fails */
-  onError?: (
-    error: Error,
-    context: IWorkflowContext<TData, TAvailableWorkResults>
-  ) => void | Promise<void>;
-  /** Optional: if true, errors won't stop the workflow (result will be undefined) */
-  silenceError?: boolean;
-  /** Not allowed - works have execute, not serial (use groups for nesting) */
-  serial?: never;
-  /** Not allowed - works have execute, not parallel (use groups for nesting) */
-  parallel?: never;
+  execute: (context: WorkflowContext<TData, TAvailableWorkResults>) => Promise<TResult>;
 }
 
 /**
- * Base properties shared by all group work definitions
- * Groups have serial/parallel, not execute (that's for works)
+ * Internal step in a tree work - either a serial step or a parallel step
  */
-interface IGroupWorkBase<
-  TName extends string,
-  TData = Record<string, unknown>,
-  TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
-> {
-  /** Unique name for the group */
-  name: TName;
-  /** Not allowed - groups have serial/parallel, not execute (use works for execute) */
-  execute?: never;
-  /** Optional: condition to determine if group should run */
-  shouldRun?: (
-    context: IWorkflowContext<TData, TAvailableWorkResults>
-  ) => boolean | Promise<boolean>;
-  /** Optional: called when group fails */
-  onError?: (
-    error: Error,
-    context: IWorkflowContext<TData, TAvailableWorkResults>
-  ) => void | Promise<void>;
-  /** Optional: if true, errors won't stop the workflow */
-  silenceError?: boolean;
-}
-
-/**
- * Serial group - inner works execute in sequence
- */
-interface ISerialGroupWorkDefinition<
-  TName extends string,
-  TData = Record<string, unknown>,
-  TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
-> extends IGroupWorkBase<TName, TData, TAvailableWorkResults> {
-  /** Inner works to execute serially */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  serial: readonly ParallelInput<string, TData, any, TAvailableWorkResults>[];
-  /** Not allowed when serial is used */
-  parallel?: never;
-}
-
-/**
- * Parallel group - inner works execute concurrently
- */
-interface IParallelGroupWorkDefinition<
-  TName extends string,
-  TData = Record<string, unknown>,
-  TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
-> extends IGroupWorkBase<TName, TData, TAvailableWorkResults> {
-  /** Not allowed when parallel is used */
-  serial?: never;
-  /** Inner works to execute in parallel */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  parallel: readonly ParallelInput<string, TData, any, TAvailableWorkResults>[];
-}
-
-/**
- * Group work definition - contains nested works that execute as a unit
- * Must have either serial OR parallel (mutually exclusive, enforced at type level)
- */
-export type IGroupWorkDefinition<
-  TName extends string,
+export type TreeWorkStep<
   TData = Record<string, unknown>,
   TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
 > =
-  | ISerialGroupWorkDefinition<TName, TData, TAvailableWorkResults>
-  | IParallelGroupWorkDefinition<TName, TData, TAvailableWorkResults>;
+  | {
+      type: 'serial';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      work: WorkInput<string, TData, any, TAvailableWorkResults>;
+    }
+  | {
+      type: 'parallel';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      works: readonly WorkInput<string, TData, any, TAvailableWorkResults>[];
+    };
 
-// Import context type (will be defined in workflow.types.ts)
-import type { IWorkflowContext } from './workflow.types';
+/**
+ * Definition of a tree work - contains nested works that execute as a unit.
+ * Tree works have steps (serial/parallel) instead of execute.
+ * Created using `Work.tree('treeName').addSerial(...).addParallel(...)`.
+ */
+export interface ITreeWorkDefinition<
+  TName extends string,
+  TData = Record<string, unknown>,
+  TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> extends WorkBehaviorOptions<TData, TAvailableWorkResults> {
+  /** Unique name for the tree work */
+  name: TName;
+  /** Steps to execute (in order) */
+  steps: readonly TreeWorkStep<TData, TAvailableWorkResults>[];
+  /** Internal marker to identify tree works */
+  readonly _isTree: true;
+}
+
+/**
+ * Runtime options for tree execution
+ */
+export type TreeRunOptions = {
+  /** If true (default), stop execution on first error. If false, collect all errors. */
+  failFast?: boolean;
+};
+
+/**
+ * Options for Work.tree() factory (excludes name, which is passed separately)
+ */
+export type TreeWorkFactoryOptions<
+  TData = Record<string, unknown>,
+  TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> = TreeRunOptions & WorkBehaviorOptions<TData, TAvailableWorkResults>;
+
+/**
+ * Options for creating a tree work (internal, includes name)
+ */
+export type TreeWorkOptions<
+  TName extends string,
+  TData = Record<string, unknown>,
+  TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> = TreeWorkFactoryOptions<TData, TAvailableWorkResults> & {
+  /** Unique name for the tree work */
+  name: TName;
+};
+
+/**
+ * Common interface for runnable tree works (both sealed and unsealed).
+ * TreeWork implements this interface.
+ */
+export interface IRunnableTreeWork<
+  TData = Record<string, unknown>,
+  TWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> {
+  /** The tree name */
+  readonly name: string;
+  /** The tree options */
+  readonly options: Readonly<Required<TreeRunOptions>>;
+  /** Check if the tree is sealed */
+  isSealed(): boolean;
+  /** Execute the tree */
+  run(data: TData): Promise<TreeResult<TData, TWorkResults>>;
+}
+
+/**
+ * A sealed tree work that cannot be modified.
+ * Has run() but no addSerial() or addParallel() methods.
+ */
+export type SealedTreeWork<
+  TData = Record<string, unknown>,
+  TWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> = IRunnableTreeWork<TData, TWorkResults>;

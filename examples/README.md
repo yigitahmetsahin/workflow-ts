@@ -12,59 +12,68 @@ npx tsx examples/parallel.ts
 npx tsx examples/conditional.ts
 npx tsx examples/error-handling.ts
 npx tsx examples/work-class.ts
+npx tsx examples/tree-work.ts
 npx tsx examples/sealed.ts
-npx tsx examples/nested-groups.ts
 ```
 
 ## Key API Pattern
 
-All examples use the `WorkResult` pattern for accessing work results:
+All examples use the `Work.tree()` API for building and running workflows:
 
 ```typescript
-import { WorkStatus } from '@yigitahmetsahin/workflow-ts';
+import { Work, WorkStatus } from '@yigitahmetsahin/workflow-ts';
 
-// workResults.get() returns WorkResult with status, result, duration
+// Build a tree with serial and parallel steps
+const tree = Work.tree('myTree')
+  .addSerial({ name: 'step1', execute: async (ctx) => 'a' })
+  .addSerial({
+    name: 'step2',
+    execute: async (ctx) => {
+      // Access previous step's result
+      const prev = ctx.workResults.get('step1').result;
+      return prev + 'b';
+    },
+  })
+  .addParallel([
+    { name: 'parallel1', execute: async () => 'p1' },
+    { name: 'parallel2', execute: async () => 'p2' },
+  ]);
+
+// Run the tree
+const result = await tree.run({ userId: '123' });
+
+// Check status
+if (result.status === WorkStatus.Completed) {
+  console.log('Success!');
+  console.log(result.context.workResults.get('step2').result); // 'ab'
+}
+```
+
+## WorkResult Pattern
+
+`workResults.get()` returns a `WorkResult` object:
+
+```typescript
 const userResult = ctx.workResults.get('fetchUser');
 
 // Access the actual value via .result
 const user = userResult.result;
-
-// Or directly chain
-const user = ctx.workResults.get('fetchUser').result;
 
 // Check execution status
 if (userResult.status === WorkStatus.Completed) {
   console.log('User fetched:', userResult.result);
 } else if (userResult.status === WorkStatus.Skipped) {
   console.log('User fetch was skipped');
+} else if (userResult.status === WorkStatus.Failed) {
+  console.log('Error:', userResult.error);
 }
-```
-
-## Sealing Workflows
-
-Use `.seal()` to prevent further modifications to a workflow:
-
-```typescript
-// Seal a workflow to expose name, works, options, isSealed(), and run()
-const sealed = new Workflow<{ userId: string }>()
-  .serial({ name: 'validate', execute: async (ctx) => true })
-  .seal();
-
-sealed.name; // 'seal'
-sealed.works; // readonly array of work definitions
-sealed.options; // { failFast: true }
-sealed.isSealed(); // true
-await sealed.run({ userId: '123' }); // OK
-
-// sealed.serial(...) // TypeScript error! Method doesn't exist
-// sealed.parallel(...) // TypeScript error! Method doesn't exist
 ```
 
 ## Examples Overview
 
 ### 1. Basic (`basic.ts`)
 
-Simple serial workflow demonstrating:
+Simple serial tree demonstrating:
 
 - Sequential task execution
 - Accessing results from previous steps via `.result`
@@ -74,25 +83,25 @@ Simple serial workflow demonstrating:
 
 Concurrent execution demonstrating:
 
-- Running multiple tasks simultaneously
-- Combining parallel results in a final step
+- Running multiple tasks simultaneously with `addParallel()`
+- Combining parallel results in a final serial step
 - Time savings from parallel execution
 
 ### 3. Conditional (`conditional.ts`)
 
-Skip-based workflow demonstrating:
+Skip-based execution demonstrating:
 
 - `shouldRun` condition for optional steps
 - Checking work status (completed vs skipped)
-- Dynamic workflow paths based on input
-- Multiple scenarios with same workflow
+- Dynamic execution paths based on input
+- Multiple scenarios with same tree
 
 ### 4. Error Handling (`error-handling.ts`)
 
 Error handling demonstrating:
 
 - `onError` callbacks for logging/alerting
-- Workflow failure states
+- Tree failure states
 - Accessing error details via `WorkResult.error`
 - Error recovery patterns
 
@@ -101,29 +110,28 @@ Error handling demonstrating:
 Standalone work definitions demonstrating:
 
 - Defining reusable `Work` instances
-- Using Work instances in `.serial()` and `.parallel()`
+- Using Work instances in `addSerial()` and `addParallel()`
 - Mixing Work instances with inline definitions
-- Reusing the same Work across multiple workflows
+- Reusing the same Work across multiple trees
 - Conditional execution with Work class
 
-### 6. Sealed (`sealed.ts`)
+### 6. Tree Work (`tree-work.ts`)
 
-Immutable workflow pattern demonstrating:
+Nested tree-like structures demonstrating:
 
-- Using `.seal()` to prevent modifications
-- Factory functions that return `SealedWorkflow`
-- Type-safe workflow distribution
-- Reusing sealed workflows with different data
+- Building tree structures with `addSerial()` and `addParallel()`
+- Unlimited nesting depth with full type inference
+- Accessing inner work results with autocomplete
+- Nesting trees inside other trees
+- Parent tracking for nested works
+- Tree-level `shouldRun`, `onError`, and `silenceError`
 
-### 7. Nested Groups (`nested-groups.ts`)
+### 7. Sealed (`sealed.ts`)
 
-Tree-like workflow structures demonstrating:
+Sealing trees to prevent modifications:
 
-- Serial chains inside parallel execution
-- Parallel groups inside parallel execution
-- Fallback patterns (try primary, then fallback)
-- **Full type inference for up to 5 levels of nesting**
-- Accessing inner work results via `parent` reference
-- Complex dependency graphs
-- Group-level `shouldRun`, `onError`, and `silenceError`
-- Sibling work access pattern (for works in the same group)
+- Simple `seal()` to lock the tree
+- `seal(finalWork)` to add a final aggregation step
+- `isSealed()` to check if tree is sealed
+- `options` to access tree configuration (e.g., `failFast`)
+- Running sealed trees

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Work, getWorkDefinition } from './work';
-import { IWorkflowContext } from './workflow.types';
+import { WorkflowContext } from './work.types';
 
 describe('Work', () => {
   describe('constructor', () => {
@@ -73,7 +73,7 @@ describe('Work', () => {
           set: vi.fn(),
           has: vi.fn(),
         },
-      } as unknown as IWorkflowContext<{ value: number }, Record<string, unknown>>;
+      } as WorkflowContext<{ value: number }, Record<string, unknown>>;
 
       const result = await work.execute(mockContext);
 
@@ -95,7 +95,7 @@ describe('Work', () => {
           set: vi.fn(),
           has: vi.fn(),
         },
-      } as unknown as IWorkflowContext<Record<string, unknown>, Record<string, unknown>>;
+      } as WorkflowContext<Record<string, unknown>, Record<string, unknown>>;
 
       await expect(work.execute(mockContext)).rejects.toThrow('Execution failed');
     });
@@ -118,7 +118,7 @@ describe('Work', () => {
           set: vi.fn(),
           has: vi.fn(),
         },
-      } as unknown as IWorkflowContext<{ flag: boolean }, Record<string, unknown>>;
+      } as WorkflowContext<{ flag: boolean }, Record<string, unknown>>;
 
       const result = work.shouldRun!(mockContext);
 
@@ -130,7 +130,7 @@ describe('Work', () => {
       const work = new Work({
         name: 'asyncConditional',
         execute: async () => 'result',
-        shouldRun: async (ctx: IWorkflowContext<{ delay: number }>) => {
+        shouldRun: async (ctx: WorkflowContext<{ delay: number }>) => {
           await new Promise((resolve) => setTimeout(resolve, ctx.data.delay));
           return true;
         },
@@ -143,7 +143,7 @@ describe('Work', () => {
           set: vi.fn(),
           has: vi.fn(),
         },
-      } as unknown as IWorkflowContext<{ delay: number }, Record<string, unknown>>;
+      } as WorkflowContext<{ delay: number }, Record<string, unknown>>;
 
       const result = await work.shouldRun!(mockContext);
 
@@ -169,7 +169,7 @@ describe('Work', () => {
           set: vi.fn(),
           has: vi.fn(),
         },
-      } as unknown as IWorkflowContext<{ id: number }, Record<string, unknown>>;
+      } as WorkflowContext<{ id: number }, Record<string, unknown>>;
 
       work.onError!(error, mockContext);
 
@@ -196,7 +196,7 @@ describe('Work', () => {
           set: vi.fn(),
           has: vi.fn(),
         },
-      } as unknown as IWorkflowContext<Record<string, unknown>, Record<string, unknown>>;
+      } as WorkflowContext<Record<string, unknown>, Record<string, unknown>>;
 
       await work.onError!(error, mockContext);
 
@@ -242,7 +242,7 @@ describe('Work', () => {
           set: vi.fn(),
           has: vi.fn(),
         },
-      } as unknown as IWorkflowContext<Record<string, unknown>, Record<string, unknown>>;
+      } as WorkflowContext<Record<string, unknown>, Record<string, unknown>>;
 
       const result = await work.execute(mockContext);
 
@@ -304,7 +304,7 @@ describe('getWorkDefinition', () => {
     const result = getWorkDefinition(definition);
 
     expect(result.name).toBe('full');
-    expect(result.execute).toBe(definition.execute);
+    expect('execute' in result && result.execute).toBe(definition.execute);
     expect(result.shouldRun).toBe(shouldRunFn);
     expect(result.onError).toBe(onErrorFn);
     expect(result.silenceError).toBe(true);

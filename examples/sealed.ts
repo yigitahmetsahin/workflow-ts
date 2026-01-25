@@ -1,79 +1,131 @@
 /**
- * Sealed workflow example - Prevent modifications after construction
+ * Sealed Tree Example
+ *
+ * Demonstrates how to seal a tree to prevent modifications:
+ * - Simple seal (prevents addSerial/addParallel)
+ * - Seal with a final work
+ * - isSealed() and options access
  */
-import { Workflow, SealedWorkflow } from '../src';
 
-interface UserData {
-  userId: string;
-}
-
-type UserWorkResults = {
-  validate: boolean;
-  fetchUser: { id: string; name: string; email: string };
-};
-
-/**
- * Factory function that returns a sealed workflow.
- * Once sealed, the workflow cannot be modified.
- */
-function buildUserWorkflow(): SealedWorkflow<UserData, UserWorkResults> {
-  return new Workflow<UserData>()
-    .serial({
-      name: 'validate',
-      execute: async (ctx) => {
-        console.log(`Validating user ID: ${ctx.data.userId}`);
-        return ctx.data.userId.length > 0;
-      },
-    })
-    .serial({
-      name: 'fetchUser',
-      execute: async (ctx) => {
-        const isValid = ctx.workResults.get('validate').result;
-        if (!isValid) {
-          throw new Error('Invalid user ID');
-        }
-        console.log(`Fetching user: ${ctx.data.userId}`);
-        await new Promise((r) => setTimeout(r, 100));
-        return { id: ctx.data.userId, name: 'John Doe', email: 'john@example.com' };
-      },
-    })
-    .seal();
-}
+import { Work } from '../src';
 
 async function main() {
-  console.log('=== Sealed Workflow Example ===\n');
+  console.log('=== Sealed Tree Example ===\n');
 
-  // Create a sealed workflow from the factory
-  const userWorkflow = buildUserWorkflow();
+  // --- Example 1: Simple Seal ---
+  console.log('1. Simple Seal (prevents modifications)\n');
 
-  // Sealed workflow has name, works, options, isSealed(), and run()
-  console.log(`Name: ${userWorkflow.name}`); // 'seal'
-  console.log(`Works: ${userWorkflow.works.length} work groups`);
-  console.log(`Options: failFast=${userWorkflow.options.failFast}`);
-  console.log(`Is sealed: ${userWorkflow.isSealed()}`); // true
+  const tree1 = Work.tree('simpleTree')
+    .addSerial({
+      name: 'step1',
+      execute: async () => {
+        console.log('  Executing step1');
+        return 'result1';
+      },
+    })
+    .addSerial({
+      name: 'step2',
+      execute: async (ctx) => {
+        const prev = ctx.workResults.get('step1').result;
+        console.log('  Executing step2, prev:', prev);
+        return 'result2';
+      },
+    });
 
-  // TypeScript prevents modifications:
-  // userWorkflow.serial(...) // ❌ Error: Property 'serial' does not exist
-  // userWorkflow.parallel(...) // ❌ Error: Property 'parallel' does not exist
+  console.log('  Before seal:');
+  console.log('    isSealed():', tree1.isSealed());
 
-  // Use run() to execute the sealed workflow
-  console.log('\nRunning sealed workflow...\n');
-  const result = await userWorkflow.run({ userId: 'user-123' });
+  // Seal the tree - returns a SealedTreeWork (no addSerial/addParallel methods)
+  const sealed1 = tree1.seal();
 
-  if (result.status === 'completed') {
-    console.log('\n✅ Workflow completed!');
-    console.log(`Total duration: ${result.totalDuration}ms`);
-    console.log('User:', result.context.workResults.get('fetchUser').result);
-  }
+  console.log('  After seal:');
+  console.log('    isSealed():', sealed1.isSealed());
+  console.log('    options:', sealed1.options);
 
-  // Run again with different data
-  console.log('\n--- Second Run ---\n');
-  const result2 = await userWorkflow.run({ userId: 'user-456' });
+  // Run the sealed tree
+  const result1 = await sealed1.run({});
+  console.log('  Status:', result1.status);
+  console.log('  Total duration:', result1.totalDuration, 'ms\n');
 
-  if (result2.status === 'completed') {
-    console.log('✅ Second run completed!');
-    console.log('User:', result2.context.workResults.get('fetchUser').result);
-  }
+  // --- Example 2: Seal with Final Work ---
+  console.log('2. Seal with Final Work\n');
+
+  const tree2 = Work.tree('treeWithFinal')
+    .addParallel([
+      {
+        name: 'fetchUser',
+        execute: async () => {
+          console.log('  Fetching user...');
+          return { id: 1, name: 'John' };
+        },
+      },
+      {
+        name: 'fetchOrders',
+        execute: async () => {
+          console.log('  Fetching orders...');
+          return [{ orderId: 101 }, { orderId: 102 }];
+        },
+      },
+    ])
+    // Seal with a final aggregation work
+    .seal({
+      name: 'aggregate',
+      execute: async (ctx) => {
+        const user = ctx.workResults.get('fetchUser').result;
+        const orders = ctx.workResults.get('fetchOrders').result;
+        console.log('  Aggregating results...');
+        return {
+          userName: user?.name,
+          orderCount: orders?.length ?? 0,
+        };
+      },
+    });
+
+  console.log('  isSealed():', tree2.isSealed());
+
+  const result2 = await tree2.run({});
+  console.log('  Status:', result2.status);
+  console.log('  Aggregate result:', result2.context.workResults.get('aggregate').result);
+  console.log('  Total duration:', result2.totalDuration, 'ms\n');
+
+  // --- Example 3: Seal with Options ---
+  console.log('3. Seal with failFast Option\n');
+
+  const tree3 = Work.tree('treeWithOptions', { failFast: false })
+    .addParallel([
+      {
+        name: 'task1',
+        execute: async () => {
+          console.log('  Task1 executing');
+          return 'task1-done';
+        },
+      },
+      {
+        name: 'task2',
+        execute: async () => {
+          console.log('  Task2 executing');
+          return 'task2-done';
+        },
+      },
+    ])
+    .seal();
+
+  console.log('  options:', tree3.options);
+  console.log('  options.failFast:', tree3.options.failFast);
+
+  const result3 = await tree3.run({});
+  console.log('  Status:', result3.status);
+  console.log('  Task1 result:', result3.context.workResults.get('task1').result);
+  console.log('  Task2 result:', result3.context.workResults.get('task2').result);
+  console.log();
+
+  // --- Summary ---
+  console.log('=== Summary ===');
+  console.log('- seal() prevents further modifications (no addSerial/addParallel)');
+  console.log('- seal(finalWork) adds a final work before sealing');
+  console.log('- isSealed() returns true after sealing');
+  console.log('- options gives access to tree configuration (e.g., failFast)');
+  console.log('- Sealed trees can still be run()');
 }
 
 main().catch(console.error);
