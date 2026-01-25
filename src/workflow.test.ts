@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Workflow } from './workflow';
 import { Work } from './work';
-import { SealedWorkflow, WorkStatus, WorkflowStatus } from './workflow.types';
+import { SealedWorkflow, WorkflowStatus } from './workflow.types';
+import { WorkStatus } from './work.types';
 
 describe('Workflow', () => {
   describe('serial execution', () => {
@@ -1268,6 +1269,433 @@ describe('Workflow', () => {
       expect(fail1OnErrorIndex).toBeLessThan(slowEndIndex);
       // fail2:onError should also come before slowSuccess:end (fail2 fails at 20ms, slow ends at 50ms)
       expect(fail2OnErrorIndex).toBeLessThan(slowEndIndex);
+    });
+  });
+
+  describe('nested workflow groups', () => {
+    it('should execute serial group within parallel', async () => {
+      const executionOrder: string[] = [];
+
+      const workflow = new Workflow<{ userId: string }>().parallel([
+        {
+          name: 'addressCollection',
+          serial: [
+            {
+              name: 'collectAddress',
+              execute: async () => {
+                executionOrder.push('collectAddress');
+                return { street: '123 Main St' };
+              },
+            },
+            {
+              name: 'validateAddress',
+              execute: async (ctx) => {
+                executionOrder.push('validateAddress');
+                // Sibling work access requires Map cast
+                const address = (
+                  ctx.workResults as unknown as Map<string, { result?: { street: string } }>
+                ).get('collectAddress')?.result;
+                return { ...address, validated: true };
+              },
+            },
+          ],
+        },
+        {
+          name: 'collectHistory',
+          execute: async () => {
+            executionOrder.push('collectHistory');
+            await new Promise((r) => setTimeout(r, 20));
+            return [{ date: '2024-01-01' }];
+          },
+        },
+      ]);
+
+      const result = await workflow.run({ userId: 'user-1' });
+
+      expect(result.status).toBe(WorkflowStatus.Completed);
+
+      // All works should be in workResults
+      expect(result.context.workResults.has('addressCollection')).toBe(true);
+      expect(result.context.workResults.has('collectAddress')).toBe(true);
+      expect(result.context.workResults.has('validateAddress')).toBe(true);
+      expect(result.context.workResults.has('collectHistory')).toBe(true);
+
+      // Inner works should have parent reference
+      expect(result.workResults.get('collectAddress')?.parent).toBe('addressCollection');
+      expect(result.workResults.get('validateAddress')?.parent).toBe('addressCollection');
+      expect(result.workResults.get('collectHistory')?.parent).toBeUndefined();
+      expect(result.workResults.get('addressCollection')?.parent).toBeUndefined();
+
+      // Group result should be the last inner work's result (for serial)
+      expect(result.context.workResults.get('addressCollection')?.result).toEqual({
+        street: '123 Main St',
+        validated: true,
+      });
+
+      // Serial works should execute in order within the group
+      const collectIdx = executionOrder.indexOf('collectAddress');
+      const validateIdx = executionOrder.indexOf('validateAddress');
+      expect(collectIdx).toBeLessThan(validateIdx);
+    });
+
+    it('should execute parallel group within parallel', async () => {
+      const startTime = Date.now();
+
+      const workflow = new Workflow<{ userId: string }>().parallel([
+        {
+          name: 'dataFetch',
+          parallel: [
+            {
+              name: 'fetchOrders',
+              execute: async () => {
+                await new Promise((r) => setTimeout(r, 50));
+                return [{ id: 1 }];
+              },
+            },
+            {
+              name: 'fetchProfile',
+              execute: async () => {
+                await new Promise((r) => setTimeout(r, 50));
+                return { name: 'John' };
+              },
+            },
+          ],
+        },
+        {
+          name: 'fetchSettings',
+          execute: async () => {
+            await new Promise((r) => setTimeout(r, 50));
+            return { theme: 'dark' };
+          },
+        },
+      ]);
+
+      const result = await workflow.run({ userId: 'user-1' });
+      const duration = Date.now() - startTime;
+
+      expect(result.status).toBe(WorkflowStatus.Completed);
+
+      // Should run in parallel, so total time should be ~50ms, not 150ms
+      expect(duration).toBeLessThan(120);
+
+      // Inner works should have parent reference
+      expect(result.workResults.get('fetchOrders')?.parent).toBe('dataFetch');
+      expect(result.workResults.get('fetchProfile')?.parent).toBe('dataFetch');
+      expect(result.workResults.get('fetchSettings')?.parent).toBeUndefined();
+
+      // Group result for parallel should be object mapping names to results
+      expect(result.context.workResults.get('dataFetch')?.result).toEqual({
+        fetchOrders: [{ id: 1 }],
+        fetchProfile: { name: 'John' },
+      });
+    });
+
+    it('should support fallback pattern with serial group and shouldRun', async () => {
+      const workflow = new Workflow<{ userId: string }>().parallel([
+        {
+          name: 'addressCollection',
+          serial: [
+            {
+              name: 'collectAddressPrimary',
+              execute: async () => {
+                throw new Error('Primary service unavailable');
+              },
+              silenceError: true,
+            },
+            {
+              name: 'collectAddressFallback',
+              shouldRun: (ctx) => {
+                // Sibling work access requires Map cast
+                if (ctx.workResults.has('collectAddressPrimary')) {
+                  const result = (
+                    ctx.workResults as unknown as Map<string, { status: WorkStatus }>
+                  ).get('collectAddressPrimary');
+                  return result?.status === WorkStatus.Failed;
+                }
+                return false;
+              },
+              execute: async () => ({ street: 'Fallback Address' }),
+            },
+          ],
+        },
+        {
+          name: 'collectHistory',
+          execute: async () => [{ date: '2024-01-01' }],
+        },
+      ]);
+
+      const result = await workflow.run({ userId: 'user-1' });
+
+      expect(result.status).toBe(WorkflowStatus.Completed);
+      expect(result.context.workResults.get('collectAddressPrimary')?.status).toBe(
+        WorkStatus.Failed
+      );
+      expect(result.context.workResults.get('collectAddressFallback')?.result).toEqual({
+        street: 'Fallback Address',
+      });
+      expect(result.context.workResults.get('addressCollection')?.result).toEqual({
+        street: 'Fallback Address',
+      });
+    });
+
+    it('should support group-level shouldRun to skip entire group', async () => {
+      const innerExecute = vi.fn().mockResolvedValue('executed');
+
+      const workflow = new Workflow<{ skipGroup: boolean }>().parallel([
+        {
+          name: 'skippableGroup',
+          shouldRun: (ctx) => !ctx.data.skipGroup,
+          serial: [
+            { name: 'inner1', execute: innerExecute },
+            { name: 'inner2', execute: innerExecute },
+          ],
+        },
+        {
+          name: 'alwaysRun',
+          execute: async () => 'done',
+        },
+      ]);
+
+      const result = await workflow.run({ skipGroup: true });
+
+      expect(result.status).toBe(WorkflowStatus.Completed);
+      expect(innerExecute).not.toHaveBeenCalled();
+      expect(result.workResults.get('skippableGroup')?.status).toBe(WorkStatus.Skipped);
+      expect(result.workResults.has('inner1')).toBe(false);
+      expect(result.workResults.has('inner2')).toBe(false);
+      expect(result.context.workResults.get('alwaysRun')?.result).toBe('done');
+    });
+
+    it('should support group-level onError', async () => {
+      const onErrorFn = vi.fn();
+
+      const workflow = new Workflow<{ userId: string }>().parallel([
+        {
+          name: 'failingGroup',
+          onError: async (err, ctx) => {
+            onErrorFn(err, ctx);
+            // Swallow the error
+          },
+          serial: [
+            {
+              name: 'willFail',
+              execute: async () => {
+                throw new Error('Inner failure');
+              },
+            },
+          ],
+        },
+        {
+          name: 'otherWork',
+          execute: async () => 'done',
+        },
+      ]);
+
+      const result = await workflow.run({ userId: 'user-1' });
+
+      expect(result.status).toBe(WorkflowStatus.Completed);
+      expect(onErrorFn).toHaveBeenCalledTimes(1);
+      expect(result.context.workResults.get('failingGroup')?.status).toBe(WorkStatus.Failed);
+      expect(result.context.workResults.get('otherWork')?.result).toBe('done');
+    });
+
+    it('should support group-level silenceError', async () => {
+      const workflow = new Workflow<{ userId: string }>().parallel([
+        {
+          name: 'silentGroup',
+          silenceError: true,
+          serial: [
+            {
+              name: 'willFail',
+              execute: async () => {
+                throw new Error('Silent failure');
+              },
+            },
+          ],
+        },
+        {
+          name: 'otherWork',
+          execute: async () => 'done',
+        },
+      ]);
+
+      const result = await workflow.run({ userId: 'user-1' });
+
+      expect(result.status).toBe(WorkflowStatus.Completed);
+      expect(result.context.workResults.get('silentGroup')?.status).toBe(WorkStatus.Failed);
+      expect(result.context.workResults.get('otherWork')?.result).toBe('done');
+    });
+
+    it('should support deeply nested groups', async () => {
+      const workflow = new Workflow<{ value: number }>().parallel([
+        {
+          name: 'level1',
+          serial: [
+            { name: 'l1-work1', execute: async (ctx) => ctx.data.value * 2 },
+            {
+              name: 'level2',
+              parallel: [
+                { name: 'l2-work1', execute: async (ctx) => ctx.data.value * 3 },
+                { name: 'l2-work2', execute: async (ctx) => ctx.data.value * 4 },
+              ],
+            },
+            { name: 'l1-work2', execute: async (ctx) => ctx.data.value * 5 },
+          ],
+        },
+      ]);
+
+      const result = await workflow.run({ value: 10 });
+
+      expect(result.status).toBe(WorkflowStatus.Completed);
+
+      // Check parent references
+      expect(result.workResults.get('l1-work1')?.parent).toBe('level1');
+      expect(result.workResults.get('level2')?.parent).toBe('level1');
+      expect(result.workResults.get('l2-work1')?.parent).toBe('level2');
+      expect(result.workResults.get('l2-work2')?.parent).toBe('level2');
+      expect(result.workResults.get('l1-work2')?.parent).toBe('level1');
+
+      // Check results
+      expect(result.context.workResults.get('l1-work1')?.result).toBe(20);
+      expect(result.context.workResults.get('l2-work1')?.result).toBe(30);
+      expect(result.context.workResults.get('l2-work2')?.result).toBe(40);
+      expect(result.context.workResults.get('l1-work2')?.result).toBe(50);
+
+      // level2 group result (parallel) should be object
+      expect(result.context.workResults.get('level2')?.result).toEqual({
+        'l2-work1': 30,
+        'l2-work2': 40,
+      });
+
+      // level1 group result (serial) should be last work's result
+      expect(result.context.workResults.get('level1')?.result).toBe(50);
+    });
+
+    it('should allow accessing inner work results from subsequent works outside the group', async () => {
+      const workflow = new Workflow<{ userId: string }>()
+        .parallel([
+          {
+            name: 'addressGroup',
+            serial: [{ name: 'fetchAddress', execute: async () => ({ street: '123 Main St' }) }],
+          },
+          {
+            name: 'historyGroup',
+            serial: [{ name: 'fetchHistory', execute: async () => [{ year: 2024 }] }],
+          },
+        ])
+        .serial({
+          name: 'combine',
+          execute: async (ctx) => {
+            // Should be able to access inner work results
+            const address = ctx.workResults.get('fetchAddress').result;
+            const history = ctx.workResults.get('fetchHistory').result;
+            return { address, history };
+          },
+        });
+
+      const result = await workflow.run({ userId: 'user-1' });
+
+      expect(result.status).toBe(WorkflowStatus.Completed);
+      expect(result.context.workResults.get('combine')?.result).toEqual({
+        address: { street: '123 Main St' },
+        history: [{ year: 2024 }],
+      });
+    });
+
+    it('should track duration for group work', async () => {
+      const workflow = new Workflow<{ userId: string }>().parallel([
+        {
+          name: 'slowGroup',
+          serial: [
+            {
+              name: 'slow1',
+              execute: async () => {
+                await new Promise((r) => setTimeout(r, 30));
+                return 'done1';
+              },
+            },
+            {
+              name: 'slow2',
+              execute: async () => {
+                await new Promise((r) => setTimeout(r, 30));
+                return 'done2';
+              },
+            },
+          ],
+        },
+      ]);
+
+      const result = await workflow.run({ userId: 'user-1' });
+
+      const groupResult = result.workResults.get('slowGroup');
+      // Group duration should be sum of inner works (~60ms)
+      expect(groupResult?.duration).toBeGreaterThanOrEqual(55);
+      expect(groupResult?.duration).toBeLessThan(200);
+    });
+
+    it('should work with Work class instances in groups', async () => {
+      const fetchWork = new Work({
+        name: 'fetchData',
+        execute: async () => ({ data: 'fetched' }),
+      });
+
+      const validateWork = new Work({
+        name: 'validateData',
+        execute: async (ctx) => {
+          // Sibling work access requires Map cast
+          const data = (
+            ctx.workResults as unknown as Map<string, { result?: { data: string } }>
+          ).get('fetchData')?.result;
+          return { ...data, validated: true };
+        },
+      });
+
+      const workflow = new Workflow<{ userId: string }>().parallel([
+        {
+          name: 'dataGroup',
+          serial: [fetchWork, validateWork],
+        },
+        {
+          name: 'otherWork',
+          execute: async () => 'done',
+        },
+      ]);
+
+      const result = await workflow.run({ userId: 'user-1' });
+
+      expect(result.status).toBe(WorkflowStatus.Completed);
+      expect(result.context.workResults.get('fetchData')?.result).toEqual({ data: 'fetched' });
+      expect(result.context.workResults.get('validateData')?.result).toEqual({
+        data: 'fetched',
+        validated: true,
+      });
+      expect(result.workResults.get('fetchData')?.parent).toBe('dataGroup');
+      expect(result.workResults.get('validateData')?.parent).toBe('dataGroup');
+    });
+
+    it('should properly propagate errors from inner works when group has no error handling', async () => {
+      const workflow = new Workflow<{ userId: string }>().parallel([
+        {
+          name: 'failingGroup',
+          serial: [
+            {
+              name: 'willFail',
+              execute: async () => {
+                throw new Error('Inner error');
+              },
+            },
+          ],
+        },
+        {
+          name: 'otherWork',
+          execute: async () => 'done',
+        },
+      ]);
+
+      const result = await workflow.run({ userId: 'user-1' });
+
+      expect(result.status).toBe(WorkflowStatus.Failed);
+      expect(result.error?.message).toBe('Inner error');
     });
   });
 

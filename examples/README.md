@@ -13,6 +13,7 @@ npx tsx examples/conditional.ts
 npx tsx examples/error-handling.ts
 npx tsx examples/work-class.ts
 npx tsx examples/sealed.ts
+npx tsx examples/nested-groups.ts
 ```
 
 ## Key API Pattern
@@ -113,3 +114,16 @@ Immutable workflow pattern demonstrating:
 - Factory functions that return `SealedWorkflow`
 - Type-safe workflow distribution
 - Reusing sealed workflows with different data
+
+### 7. Nested Groups (`nested-groups.ts`)
+
+Tree-like workflow structures demonstrating:
+
+- Serial chains inside parallel execution
+- Parallel groups inside parallel execution
+- Fallback patterns (try primary, then fallback)
+- **Full type inference for up to 5 levels of nesting**
+- Accessing inner work results via `parent` reference
+- Complex dependency graphs
+- Group-level `shouldRun`, `onError`, and `silenceError`
+- Sibling work access pattern (for works in the same group)

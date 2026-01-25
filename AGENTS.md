@@ -49,13 +49,30 @@ This distinction helps clarify intent: interfaces define behavior contracts, typ
 
 ```
 src/
-├── index.ts           # Public exports
-├── work.ts            # Work class for standalone work definitions
-├── work.test.ts       # Unit tests for Work class (Vitest)
-├── workflow.ts        # Core Workflow class implementation
-├── workflow.types.ts  # Type definitions
-└── workflow.test.ts   # Unit tests for Workflow class (Vitest)
+├── index.ts            # Public exports
+├── type-guards.ts      # Type guard functions (isGroupWorkDefinition)
+├── work.ts             # Work class for standalone work definitions
+├── work.types.ts       # Work-related type definitions (WorkStatus, WorkResult, IWorkDefinition, etc.)
+├── work.test.ts        # Unit tests for Work class (Vitest)
+├── work-results-map.ts # Internal WorkResultsMap implementation
+├── workflow.ts         # Core Workflow class implementation
+├── workflow.types.ts   # Workflow-related type definitions (IWorkflow, WorkflowResult, etc.)
+└── workflow.test.ts    # Unit tests for Workflow class (Vitest)
 ```
+
+### Avoiding Circular Dependencies
+
+Type files are split to prevent circular imports:
+
+- **work.types.ts** → imports `IWorkflowContext` from workflow.types.ts
+- **workflow.types.ts** → imports work types from work.types.ts
+
+Rules to maintain this:
+
+1. **Never re-export** types from one file through another - import directly from the source
+2. **Keep runtime code separate** from type definitions (e.g., type guards belong in implementation files)
+3. **Use `import type`** when only types are needed (helps bundlers and avoids runtime cycles)
+4. When adding new types, consider which file they belong to based on their primary concern (work vs workflow)
 
 ## Testing Instructions
 
@@ -187,6 +204,46 @@ const workflow2 = new Workflow<TData>()
   .serial(myWork) // Work instance
   .parallel([work1, work2]); // Work instances or inline definitions can be mixed
 
+// Option 3: Nested groups in parallel (tree-like workflows)
+// TYPE INFERENCE: Supports up to 5 levels of nesting - all work names and result types are inferred!
+const workflow3 = new Workflow<TData>().parallel([
+  // Serial group - works execute in sequence within this branch
+  {
+    name: 'addressCollection',
+    serial: [
+      { name: 'collectPrimary', execute: async (ctx) => primary, silenceError: true },
+      {
+        name: 'collectFallback',
+        // For sibling works, use has() + Map access (siblings aren't known at compile time)
+        shouldRun: (ctx) => {
+          if (ctx.workResults.has('collectPrimary')) {
+            const result = (ctx.workResults as unknown as Map<string, { status: WorkStatus }>).get(
+              'collectPrimary'
+            );
+            return result?.status === WorkStatus.Failed;
+          }
+          return false;
+        },
+        execute: async (ctx) => fallback,
+      },
+    ],
+    // Groups support: shouldRun, onError, silenceError
+  },
+  // Parallel group - works execute concurrently within this branch
+  {
+    name: 'dataFetch',
+    parallel: [
+      { name: 'fetchOrders', execute: async (ctx) => orders },
+      { name: 'fetchProfile', execute: async (ctx) => profile },
+    ],
+  },
+  // Regular work - runs in parallel with the groups
+  { name: 'fetchHistory', execute: async (ctx) => history },
+]);
+
+// NOTE: Works have `execute`, Groups have `serial` OR `parallel` (mutually exclusive)
+// You cannot have both `execute` and `serial`/`parallel` on the same definition
+
 // Run workflow
 const result = await workflow.run(initialData);
 
@@ -195,8 +252,20 @@ const step1Result = result.context.workResults.get('step1');
 console.log(step1Result.status); // WorkStatus.Completed | WorkStatus.Failed | WorkStatus.Skipped
 console.log(step1Result.result); // the actual return value
 console.log(step1Result.duration); // execution time in ms
+console.log(step1Result.parent); // parent group name (if nested), or undefined
 
-// Option 3: Seal workflow to prevent modifications
+// All nested works are accessible at top level with full type inference (up to 5 levels)
+const primary = result.context.workResults.get('collectPrimary'); // parent: 'addressCollection'
+const orders = result.context.workResults.get('fetchOrders'); // parent: 'dataFetch'
+const history = result.context.workResults.get('fetchHistory'); // parent: undefined
+
+// Group results
+// Serial group: result is last inner work's return value
+// Parallel group: result is object { workName: result, ... }
+const groupResult = result.context.workResults.get('dataFetch').result;
+// { fetchOrders: orders, fetchProfile: profile }
+
+// Option 4: Seal workflow to prevent modifications
 const sealed: SealedWorkflow<TData, TWorkResults> = workflow.seal();
 sealed.name; // 'seal'
 sealed.works; // readonly array of work definitions
@@ -206,7 +275,7 @@ await sealed.run(initialData); // Execute the workflow
 // sealed.serial(...) - TypeScript error! Method doesn't exist
 // sealed.parallel(...) - TypeScript error! Method doesn't exist
 
-// Option 4: Seal with a final work (executes after all previous works)
+// Option 5: Seal with a final work (executes after all previous works)
 const sealedWithWork = workflow.seal({
   name: 'finalize', // required
   execute: async (ctx) => {
