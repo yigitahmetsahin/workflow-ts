@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [6.1.1](https://github.com/yigitahmetsahin/work-tree/compare/v6.1.0...v6.1.1) (2026-01-25)
+
+
+### Bug Fixes
+
+* preserve workResults inference when using Work.tree&lt;TData&gt;() ([6998181](https://github.com/yigitahmetsahin/work-tree/commit/69981814c9117eb7f7087e500d8653fe4fe606a0))
+
 ## [6.1.0](https://github.com/yigitahmetsahin/work-tree/compare/v6.0.0...v6.1.0) (2026-01-25)
 
 
