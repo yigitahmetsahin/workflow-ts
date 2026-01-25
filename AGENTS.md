@@ -65,6 +65,38 @@ src/
 - Tests use Vitest framework
 - For timing-related tests, use tolerances (e.g., `toBeGreaterThanOrEqual(45)` instead of exact `50`) to account for CI variance
 
+### Test-Driven Development (TDD)
+
+**Always use TDD when implementing new features or fixing bugs:**
+
+1. **Write tests first** - Create tests that define the expected behavior before writing implementation code
+2. **Run tests to see them fail** - Verify the tests fail as expected (red phase)
+3. **Implement the feature** - Write the minimum code needed to make tests pass (green phase)
+4. **Refactor if needed** - Clean up the code while keeping tests passing (refactor phase)
+
+Benefits of TDD:
+
+- Forces clear understanding of requirements before coding
+- Ensures test coverage for new functionality
+- Produces more modular, testable code
+- Documents expected behavior through tests
+
+Example workflow:
+
+```bash
+# 1. Write failing tests
+npm test  # Tests fail ❌
+
+# 2. Implement feature
+# ... write code ...
+
+# 3. Verify tests pass
+npm test  # Tests pass ✅
+
+# 4. Refactor and verify
+npm test  # Still passing ✅
+```
+
 ## Pre-Commit Checklist
 
 Before committing any changes, **ALWAYS run**:
@@ -207,6 +239,17 @@ When making code changes, **ALWAYS keep the following up to date**:
    - Ensure all examples are runnable and correct
 
 Documentation, tests, and examples should be updated **in the same PR** as the code changes, not as a follow-up.
+
+## Branching Policy
+
+- **Each feature or fix requires a separate branch** - never push multiple unrelated changes to the same branch
+- Branch naming convention:
+  - Features: `feat/<short-description>` (e.g., `feat/retry-mechanism`)
+  - Bug fixes: `fix/<short-description>` (e.g., `fix/null-handling`)
+  - Refactors: `refactor/<short-description>`
+- **One PR per feature/fix** - do not combine unrelated changes in a single PR
+- Always create branches from the latest `main`
+- After a PR is merged, create a new branch for the next change - do not reuse merged branches
 
 ## Important Notes
 

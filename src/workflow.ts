@@ -333,6 +333,23 @@ export class Workflow<
     context: IWorkflowContext<TData, TWorkResults>,
     workResults: Map<keyof TWorkResults, WorkResult>
   ): Promise<void> {
+    // Helper to store failed result
+    const storeFailedResult = (
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      work: IWorkDefinition<string, TData, any, any>,
+      err: Error,
+      duration: number
+    ) => {
+      const failedResult: WorkResult = {
+        status: WorkStatus.Failed,
+        error: err,
+        duration,
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      context.workResults.set(work.name as keyof TWorkResults, failedResult as any);
+      workResults.set(work.name as keyof TWorkResults, failedResult);
+    };
+
     const promises = works.map(async (work) => {
       const workStartTime = Date.now();
 
@@ -356,91 +373,74 @@ export class Workflow<
         return { work, result, startTime: workStartTime };
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
+        const duration = Date.now() - workStartTime;
 
-        // If silenceError is true, don't call onError, just return the error as swallowed
+        // If silenceError is true, store result and continue (no onError call)
         if (work.silenceError) {
-          return { work, error: err, startTime: workStartTime, swallowed: true };
+          storeFailedResult(work, err, duration);
+          return { work, handled: true };
         }
 
-        // If failFast is true and onError exists, call it immediately
-        // If onError throws, propagate. If it doesn't throw, swallow.
-        if (this._options.failFast && work.onError) {
+        // If onError exists, call it immediately
+        // If onError throws, propagate. If it doesn't throw, error is handled.
+        if (work.onError) {
           try {
             await work.onError(err, context);
-            // onError didn't throw - swallow the error
-            return { work, error: err, startTime: workStartTime, swallowed: true };
+            // onError didn't throw - error is handled
+            storeFailedResult(work, err, duration);
+            return { work, handled: true };
           } catch {
             // onError threw - propagate the error
-            return { work, error: err, startTime: workStartTime, swallowed: false };
+            return { work, error: err, startTime: workStartTime };
           }
         }
 
-        // No onError or failFast is false - will be handled after Promise.all
-        return { work, error: err, startTime: workStartTime, swallowed: false };
+        // No onError - propagate the error
+        return { work, error: err, startTime: workStartTime };
       }
     });
 
     const results = await Promise.all(promises);
 
-    // Process results and check for errors
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const errors: { work: IWorkDefinition<string, TData, any, any>; error: Error }[] = [];
+    // Process results and collect errors to propagate
+
+    const errors: Error[] = [];
 
     for (const result of results) {
-      if ('skipped' in result && result.skipped) {
+      // Skip handled cases (skipped or error handled by silenceError/onError)
+      if (('skipped' in result && result.skipped) || ('handled' in result && result.handled)) {
         continue;
       }
 
       const duration = Date.now() - result.startTime!;
 
       if ('error' in result && result.error) {
-        const workResult: WorkResult = {
+        // Error that should propagate - store result and track error
+        const failedResult: WorkResult = {
           status: WorkStatus.Failed,
           error: result.error,
           duration,
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        context.workResults.set(result.work.name as keyof TWorkResults, workResult as any);
-        workResults.set(result.work.name as keyof TWorkResults, workResult);
-
-        // Track as error only if not swallowed and not silenced
-        if (!result.swallowed && !result.work.silenceError) {
-          errors.push({ work: result.work, error: result.error });
-        }
+        context.workResults.set(result.work.name as keyof TWorkResults, failedResult as any);
+        workResults.set(result.work.name as keyof TWorkResults, failedResult);
+        errors.push(result.error);
       } else {
-        const workResult: WorkResult = {
+        // Success
+        const completedResult: WorkResult = {
           status: WorkStatus.Completed,
           result: result.result,
           duration,
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        context.workResults.set(result.work.name as keyof TWorkResults, workResult as any);
-        workResults.set(result.work.name as keyof TWorkResults, workResult);
+        context.workResults.set(result.work.name as keyof TWorkResults, completedResult as any);
+        workResults.set(result.work.name as keyof TWorkResults, completedResult);
       }
     }
 
-    // Call error handlers for all failed works only if failFast is false (deferred mode)
-    // Skip if silenceError is true (don't call onError for silenced errors)
-    if (!this._options.failFast) {
-      for (const result of results) {
-        if ('error' in result && result.error && result.work.onError && !result.work.silenceError) {
-          try {
-            await result.work.onError(result.error, context);
-            // onError didn't throw - mark as swallowed (remove from errors)
-            const errorIndex = errors.findIndex((e) => e.work === result.work);
-            if (errorIndex !== -1) {
-              errors.splice(errorIndex, 1);
-            }
-          } catch {
-            // onError threw - keep the error in the list
-          }
-        }
-      }
-    }
-
-    // Throw the first non-silenced error to stop workflow
+    // Throw the first error to stop workflow
     if (errors.length > 0) {
-      throw errors[0].error;
+      throw errors[0];
     }
   }
 }

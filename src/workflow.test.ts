@@ -913,6 +913,57 @@ describe('Workflow', () => {
       expect(events).toContain('swallowed:onError');
       expect(events).toContain('rethrown:onError');
     });
+
+    it('should handle silenceError alongside onError swallow in parallel works', async () => {
+      const silencedOnError = vi.fn();
+      const swallowedOnError = vi.fn();
+
+      const workflow = new Workflow<{ value: number }>()
+        .parallel([
+          {
+            name: 'silenced',
+            execute: async () => {
+              throw new Error('Silenced error');
+            },
+            silenceError: true,
+            onError: silencedOnError, // Should NOT be called
+          },
+          {
+            name: 'swallowed',
+            execute: async () => {
+              throw new Error('Swallowed error');
+            },
+            onError: async (err, ctx) => {
+              swallowedOnError(err, ctx);
+              // Don't throw - swallow
+            },
+          },
+          {
+            name: 'success',
+            execute: async () => 'ok',
+          },
+        ])
+        .serial({ name: 'after', execute: async () => 'continued' });
+
+      const result = await workflow.run({ value: 5 });
+
+      // Workflow should continue since both errors are handled
+      expect(result.status).toBe(WorkflowStatus.Completed);
+
+      // silenceError: true - onError should NOT be called
+      expect(silencedOnError).not.toHaveBeenCalled();
+
+      // onError swallow - onError should be called
+      expect(swallowedOnError).toHaveBeenCalledTimes(1);
+
+      // Both failed works should have Failed status
+      expect(result.context.workResults.get('silenced')?.status).toBe(WorkStatus.Failed);
+      expect(result.context.workResults.get('swallowed')?.status).toBe(WorkStatus.Failed);
+
+      // Success work and subsequent work should complete
+      expect(result.context.workResults.get('success')?.result).toBe('ok');
+      expect(result.context.workResults.get('after')?.result).toBe('continued');
+    });
   });
 
   describe('failFast option', () => {
@@ -1130,7 +1181,7 @@ describe('Workflow', () => {
       expect(onErrorIndex).toBeLessThan(slowEndIndex);
     });
 
-    it('should call onError after all parallel works complete with failFast: false', async () => {
+    it('should call onError immediately even with failFast: false', async () => {
       const events: string[] = [];
 
       const workflow = new Workflow<{ value: number }>({ failFast: false }).parallel([
@@ -1142,6 +1193,7 @@ describe('Workflow', () => {
           },
           onError: async () => {
             events.push('fastFail:onError');
+            throw new Error('Fast failure'); // Re-throw to propagate
           },
         },
         {
@@ -1157,14 +1209,15 @@ describe('Workflow', () => {
 
       await workflow.run({ value: 5 });
 
-      // With failFast: false, onError should be called after all works complete
+      // onError should be called immediately (before slowSuccess ends)
+      // regardless of failFast setting
       const onErrorIndex = events.indexOf('fastFail:onError');
       const slowEndIndex = events.indexOf('slowSuccess:end');
 
       expect(onErrorIndex).toBeGreaterThan(-1);
       expect(slowEndIndex).toBeGreaterThan(-1);
-      // onError should be called AFTER slowSuccess completes
-      expect(onErrorIndex).toBeGreaterThan(slowEndIndex);
+      // onError should be called BEFORE slowSuccess completes
+      expect(onErrorIndex).toBeLessThan(slowEndIndex);
     });
 
     it('should call multiple onError handlers immediately with failFast: true', async () => {
