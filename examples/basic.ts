@@ -1,15 +1,11 @@
 /**
- * Basic workflow example - Simple serial execution
+ * Basic example - Simple serial execution with Work.tree()
  */
-import { Workflow, WorkflowStatus } from '../src';
-
-interface UserData {
-  userId: string;
-}
+import { Work, WorkStatus } from '../src';
 
 async function main() {
-  const workflow = new Workflow<UserData>()
-    .serial({
+  const tree = Work.tree('userOnboarding')
+    .addSerial({
       name: 'fetchUser',
       execute: async (ctx) => {
         console.log(`Fetching user: ${ctx.data.userId}`);
@@ -18,7 +14,7 @@ async function main() {
         return { id: ctx.data.userId, name: 'John Doe', email: 'john@example.com' };
       },
     })
-    .serial({
+    .addSerial({
       name: 'sendWelcomeEmail',
       execute: async (ctx) => {
         const user = ctx.workResults.get('fetchUser').result;
@@ -28,10 +24,10 @@ async function main() {
       },
     });
 
-  const result = await workflow.run({ userId: 'user-123' });
+  const result = await tree.run({ userId: 'user-123' });
 
-  if (result.status === WorkflowStatus.Completed) {
-    console.log('\n✅ Workflow completed!');
+  if (result.status === WorkStatus.Completed) {
+    console.log('\n✅ Tree completed!');
     console.log(`Total duration: ${result.totalDuration}ms`);
     console.log('Results:', {
       user: result.context.workResults.get('fetchUser').result,

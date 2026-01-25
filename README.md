@@ -11,11 +11,12 @@ A simple, extensible TypeScript workflow engine supporting serial and parallel w
 
 ## Features
 
+- 🌳 **Tree-Based Workflows** - Build workflows as composable tree structures
 - 🔄 **Serial & Parallel Execution** - Chain work items sequentially or run them concurrently
 - 🎯 **Full Type Inference** - Work names and result types are automatically inferred
-- 🧩 **Standalone Work Definitions** - Define works as reusable `Work` instances
+- 🧩 **Composable Trees** - Nest trees inside trees for complex workflows
 - ⏭️ **Conditional Execution** - Skip work items based on runtime conditions
-- 🛡️ **Error Handling** - Built-in error callbacks and workflow failure states
+- 🛡️ **Error Handling** - Built-in error callbacks and silenceError option
 - 📊 **Execution Tracking** - Duration tracking for individual works and total workflow
 - 🪶 **Zero Dependencies** - Lightweight with no external runtime dependencies
 
@@ -36,636 +37,395 @@ pnpm add @yigitahmetsahin/workflow-ts
 ## Quick Start
 
 ```typescript
-import { Workflow, Work, WorkflowStatus, WorkStatus } from '@yigitahmetsahin/workflow-ts';
+import { Work, WorkStatus } from '@yigitahmetsahin/workflow-ts';
 
-// Option 1: Define works inline
-const workflow = new Workflow<{ userId: string }>()
-  .serial({
+// Build a tree with serial and parallel steps
+const tree = Work.tree('userDashboard')
+  .addSerial({
     name: 'validate',
     execute: async (ctx) => ctx.data.userId.length > 0,
   })
-  .parallel([
+  .addParallel([
     {
       name: 'fetchOrders',
-      execute: async (ctx) => [{ id: 1 }, { id: 2 }],
+      execute: async () => [{ id: 1 }, { id: 2 }],
     },
     {
       name: 'fetchProfile',
-      execute: async (ctx) => ({ name: 'John', email: 'john@example.com' }),
+      execute: async () => ({ name: 'John', email: 'john@example.com' }),
     },
   ])
-  .serial({
+  .addSerial({
     name: 'process',
     execute: async (ctx) => {
       // ✅ Types are automatically inferred!
       // workResults.get() returns WorkResult with status, result, duration
-      const orders = ctx.workResults.get('fetchOrders').result; // { id: number }[]
-      const profile = ctx.workResults.get('fetchProfile').result; // { name: string; email: string }
+      const orders = ctx.workResults.get('fetchOrders').result;
+      const profile = ctx.workResults.get('fetchProfile').result;
       return { orderCount: orders?.length ?? 0, userName: profile?.name };
     },
   });
 
-// Option 2: Define works as reusable Work instances
-const validateUser = new Work({
-  name: 'validate',
-  execute: async (ctx) => ctx.data.userId.length > 0,
-});
+// Run the tree
+const result = await tree.run({ userId: 'user-123' });
 
-const fetchOrders = new Work({
-  name: 'fetchOrders',
-  execute: async (ctx) => [{ id: 1 }, { id: 2 }],
-});
-
-const workflow2 = new Workflow<{ userId: string }>().serial(validateUser).parallel([fetchOrders]);
-
-const result = await workflow.run({ userId: 'user-123' });
-
-if (result.status === WorkflowStatus.Completed) {
-  console.log('Workflow completed in', result.totalDuration, 'ms');
+if (result.status === WorkStatus.Completed) {
+  console.log('Tree completed in', result.totalDuration, 'ms');
   console.log('Final result:', result.context.workResults.get('process').result);
 }
 ```
 
 ## API Reference
 
-### `Workflow<TData>`
+### `Work.tree(name, options?)`
 
-Create a new workflow with optional initial data type.
-
-```typescript
-const workflow = new Workflow<{ userId: string }>();
-```
-
-### `.serial(work)`
-
-Add a serial (sequential) work to the workflow.
+Create a new tree work with a builder API for adding serial and parallel steps.
 
 ```typescript
-workflow.serial({
-  name: 'workName', // Unique name for this work
-  execute: async (ctx) => {
-    // Async function that performs the work
-    return result; // Return value becomes available to subsequent works
-  },
-  shouldRun: (ctx) => true, // Optional: condition to skip this work
-  onError: (error, ctx) => {
-    // Optional: error handler
-    console.error(error);
-  },
+// Simple tree
+const tree = Work.tree('myTree');
+
+// With options
+const tree = Work.tree('myTree', {
+  failFast: true, // optional: stop on first error (default: true)
+  shouldRun: (ctx) => true, // optional: skip entire tree
+  onError: (error, ctx) => {}, // optional: handle tree-level errors
+  silenceError: false, // optional: continue on error
+});
+
+// With typed data
+interface UserData {
+  userId: string;
+}
+const typedTree = Work.tree<UserData>('myTree').addSerial({
+  name: 'step1',
+  execute: async (ctx) => ctx.data.userId, // ✅ ctx.data is typed as UserData
 });
 ```
 
-### `.parallel(works)`
+### `.addSerial(work)`
 
-Add parallel works that execute concurrently.
+Add a work to execute sequentially. Works added with `addSerial` run one after another.
 
 ```typescript
-workflow.parallel([
-  { name: 'task1', execute: async (ctx) => result1 },
-  { name: 'task2', execute: async (ctx) => result2 },
-  { name: 'task3', execute: async (ctx) => result3 },
+tree
+  .addSerial({
+    name: 'step1',
+    execute: async (ctx) => 'result1',
+  })
+  .addSerial({
+    name: 'step2',
+    execute: async (ctx) => {
+      // Access previous step's result
+      const prev = ctx.workResults.get('step1').result; // 'result1'
+      return 'result2';
+    },
+  });
+```
+
+### `.addParallel([works])`
+
+Add multiple works to execute concurrently. All works in the array run simultaneously.
+
+```typescript
+tree.addParallel([
+  { name: 'parallel1', execute: async () => 'a' },
+  { name: 'parallel2', execute: async () => 'b' },
+  { name: 'parallel3', execute: async () => 'c' },
 ]);
 ```
 
-#### Nested Groups
+### `.run(data)`
 
-You can nest serial or parallel groups inside `.parallel()` for complex workflow structures. **Type inference supports up to 5 levels of nesting** - all work names and their result types are fully inferred!
+Execute the tree with the given data.
 
 ```typescript
-import { Workflow, WorkStatus } from '@yigitahmetsahin/workflow-ts';
+const result = await tree.run({ userId: '123' });
 
-const workflow = new Workflow<{ userId: string }>().parallel([
-  // A serial group: works execute in sequence
-  {
-    name: 'addressCollection',
-    serial: [
-      {
-        name: 'collectAddressPrimary',
-        execute: async () => fetchAddressPrimary(),
-        silenceError: true, // Don't fail if primary fails
-      },
-      {
-        name: 'collectAddressFallback',
-        // For sibling works, use has() + Map access (siblings aren't known at compile time)
-        shouldRun: (ctx) => {
-          if (ctx.workResults.has('collectAddressPrimary')) {
-            const result = (ctx.workResults as unknown as Map<string, { status: WorkStatus }>).get(
-              'collectAddressPrimary'
-            );
-            return result?.status === WorkStatus.Failed;
-          }
-          return false;
-        },
-        execute: async () => fetchAddressFallback(),
-      },
-    ],
-  },
-  // A parallel group: works execute concurrently
-  {
-    name: 'dataFetch',
-    parallel: [
-      { name: 'fetchOrders', execute: async () => fetchOrders() },
-      { name: 'fetchProfile', execute: async () => fetchProfile() },
-    ],
-  },
-  // Regular work: runs in parallel with the groups
-  { name: 'fetchHistory', execute: async () => fetchHistory() },
-]);
-
-const result = await workflow.run({ userId: '123' });
-
-// Type inference works for all nested works (up to 5 levels)!
-const address = result.context.workResults.get('collectAddressFallback').result;
-const orders = result.context.workResults.get('fetchOrders').result;
-const history = result.context.workResults.get('fetchHistory').result;
-
-// Track parent relationships via the parent field
-console.log(result.context.workResults.get('collectAddressPrimary').parent); // 'addressCollection'
-console.log(result.context.workResults.get('fetchOrders').parent); // 'dataFetch'
-console.log(result.context.workResults.get('fetchHistory').parent); // undefined
+// Result structure
+result.status; // WorkStatus.Completed | WorkStatus.Failed
+result.totalDuration; // number (ms)
+result.error; // Error | undefined
+result.context.data; // { userId: '123' }
+result.context.workResults.get('step1'); // WorkResult
 ```
 
-**Type inference details:**
+### `.seal(finalWork?)`
 
-- **Up to 5 levels**: Works nested inside groups, inside groups, etc. are all type-inferred
-- **Sibling works**: For accessing sibling works in `shouldRun`/`execute` within the same group, use `has()` + Map access (siblings aren't known at compile time)
-- **Mutually exclusive**: A definition must have either `execute` (work) OR `serial`/`parallel` (group), not both
+Seal the tree to prevent modifications. Optionally add a final work.
 
-**Group result types:**
+```typescript
+// Simple seal - prevents addSerial/addParallel
+const sealed = tree.seal();
+// sealed.addSerial(...) // Error - method doesn't exist on sealed tree
 
-- **Serial group**: Result is the last inner work's return value
-- **Parallel group**: Result is an object mapping inner work names to their results
+// Seal with final work
+const sealedWithFinal = tree.seal({
+  name: 'finalize',
+  execute: async (ctx) => {
+    const prev = ctx.workResults.get('step1').result;
+    return `Done: ${prev}`;
+  },
+});
 
-**Groups support all work options:**
+// Sealed trees can still be run
+const result = await sealed.run(data);
+```
+
+### `.isSealed()` / `.options`
+
+Check tree state and access options.
+
+```typescript
+const tree = Work.tree('tree', { failFast: false });
+
+tree.isSealed(); // false
+tree.options; // { failFast: false }
+
+tree.seal();
+tree.isSealed(); // true
+```
+
+### Work Definition
+
+Each work can have the following properties:
 
 ```typescript
 {
-  name: 'myGroup',
-  serial: [...],
-  shouldRun: (ctx) => true,      // Skip entire group if false
-  onError: (error, ctx) => {},   // Handle group errors
-  silenceError: true,            // Don't fail workflow on group error
+  name: 'workName',           // Required: unique name
+  execute: async (ctx) => {}, // Required: async function
+  shouldRun: (ctx) => true,   // Optional: skip condition
+  onError: (err, ctx) => {},  // Optional: error handler
+  silenceError: false,        // Optional: continue on error
 }
 ```
 
 ### `Work` Class
 
-Define standalone, reusable work units using the `Work` class:
+For reusable work definitions, use the `Work` class:
 
 ```typescript
-import { Work, Workflow } from '@yigitahmetsahin/workflow-ts';
-
-// Define works as standalone units
 const fetchUser = new Work({
   name: 'fetchUser',
   execute: async (ctx) => {
-    const response = await fetch(`/api/users/${ctx.data.userId}`);
-    return response.json();
+    return { id: ctx.data.userId, name: 'John' };
   },
 });
 
-const fetchOrders = new Work({
-  name: 'fetchOrders',
-  execute: async (ctx) => {
-    const response = await fetch(`/api/orders?userId=${ctx.data.userId}`);
-    return response.json();
-  },
-});
-
-// Use them in workflows
-const workflow = new Workflow<{ userId: string }>()
-  .serial(fetchUser)
-  .parallel([fetchOrders, anotherWork]);
+// Use in any tree
+const tree = Work.tree('tree').addSerial(fetchUser);
 ```
 
-Works can be mixed with inline definitions:
+## Nested Trees
+
+Trees can be nested inside other trees for complex workflows:
 
 ```typescript
-workflow
-  .serial(fetchUser) // Work instance
-  .parallel([
-    fetchOrders, // Work instance
-    {
-      // Inline definition
-      name: 'fetchProfile',
-      execute: async (ctx) => ({ name: 'John' }),
-    },
-  ]);
-```
+// Inner tree
+const fetchDataTree = Work.tree('fetchData').addParallel([
+  { name: 'fetchOrders', execute: async () => ['order1', 'order2'] },
+  { name: 'fetchProfile', execute: async () => ({ name: 'John' }) },
+]);
 
-The `Work` class supports all the same options as inline definitions:
-
-```typescript
-const conditionalWork = new Work({
-  name: 'conditionalTask',
-  execute: async (ctx) => 'result',
-  shouldRun: (ctx) => ctx.data.enabled, // Optional condition
-  onError: (error, ctx) => console.error(error), // Optional error handler
-  silenceError: true, // Optional: don't fail workflow on error
-});
-```
-
-### `.seal(sealingWork?)`
-
-Seal the workflow to prevent further modifications. Returns an `SealedWorkflow` that exposes `name`, `works`, `options`, `isSealed()`, and `run()`.
-
-```typescript
-const sealed = new Workflow<{ userId: string }>()
-  .serial({
-    name: 'validate',
-    execute: async (ctx) => ctx.data.userId.length > 0,
-  })
-  .parallel([
-    { name: 'fetchOrders', execute: async (ctx) => [{ id: 1 }] },
-    { name: 'fetchProfile', execute: async (ctx) => ({ name: 'John' }) },
-  ])
-  .seal();
-
-// Sealed workflow properties
-console.log(sealed.name); // 'seal'
-console.log(sealed.works); // readonly array of work definitions
-console.log(sealed.options); // { failFast: true }
-console.log(sealed.isSealed()); // true
-
-// TypeScript prevents further modifications:
-// sealed.serial(...) // ❌ Error: Property 'serial' does not exist
-// sealed.parallel(...) // ❌ Error: Property 'parallel' does not exist
-
-// Only run() is available for execution:
-const result = await sealed.run({ userId: '123' }); // ✅ OK
-```
-
-This is useful when you want to:
-
-- **Enforce immutability** - Ensure the workflow definition cannot be accidentally modified after construction
-- **Expose a clean API** - Pass a sealed workflow to other parts of your code that should only execute it, not modify it
-- **Type safety** - Get compile-time errors if someone tries to add more works to a finalized workflow
-
-```typescript
-// Example: Factory function that returns a sealed workflow
-function buildUserWorkflow(): SealedWorkflow<{ userId: string }, { user: User }> {
-  return new Workflow<{ userId: string }>()
-    .serial({
-      name: 'user',
-      execute: async (ctx) => fetchUser(ctx.data.userId),
-    })
-    .seal();
-}
-
-// Consumers can only run the workflow
-const workflow = buildUserWorkflow();
-console.log(workflow.name); // 'seal'
-const result = await workflow.run({ userId: '123' });
-```
-
-#### Seal with Final Work
-
-You can pass an execute function to `seal()` that runs as a final serial work after all previous works:
-
-```typescript
-const sealed = new Workflow<{ userId: string }>()
-  .serial({ name: 'validate', execute: async (ctx) => true })
-  .parallel([
-    { name: 'fetchOrders', execute: async () => [{ id: 1 }] },
-    { name: 'fetchProfile', execute: async () => ({ name: 'John' }) },
-  ])
-  .seal({
-    name: 'finalize', // required
+// Outer tree containing inner tree
+const mainTree = Work.tree('main')
+  .addSerial({ name: 'validate', execute: async () => true })
+  .addSerial(fetchDataTree) // ← Nest the inner tree
+  .addSerial({
+    name: 'process',
     execute: async (ctx) => {
-      // Access results from previous works
+      // Access inner tree's work results directly!
       const orders = ctx.workResults.get('fetchOrders').result;
       const profile = ctx.workResults.get('fetchProfile').result;
-      return { orders, profile, summary: 'Done' };
-    },
-    // Optional: shouldRun, onError, silenceError work just like serial works
-  });
-
-const result = await sealed.run({ userId: '123' });
-console.log(result.workResults.get('finalize')?.result); // { orders, profile, summary: 'Done' }
-```
-
-### Error Silencing
-
-Use `silenceError: true` to allow a work to fail without stopping the workflow. The error is still recorded and accessible:
-
-```typescript
-import { Workflow, WorkStatus, WorkflowStatus } from '@yigitahmetsahin/workflow-ts';
-
-const workflow = new Workflow<{ userId: string }>()
-  .serial({
-    name: 'fetchOptionalData',
-    execute: async () => {
-      throw new Error('Service unavailable');
-    },
-    silenceError: true, // Won't stop the workflow
-    onError: (err) => console.warn('Optional fetch failed:', err.message),
-  })
-  .serial({
-    name: 'continue',
-    execute: async (ctx) => {
-      // Check if previous work failed
-      const optionalResult = ctx.workResults.get('fetchOptionalData');
-      if (optionalResult.status === WorkStatus.Failed) {
-        return { data: null, error: optionalResult.error?.message };
-      }
-      return { data: optionalResult.result };
+      return { orders, profile };
     },
   });
 
-const result = await workflow.run({ userId: '123' });
-// result.status === WorkflowStatus.Completed (workflow continues despite error)
+const result = await mainTree.run({});
+
+// Inner work results include parent reference
+result.workResults.get('fetchOrders')?.parent; // 'fetchData'
 ```
-
-### Workflow Options
-
-The `Workflow` constructor accepts an options object:
-
-```typescript
-interface WorkflowOptions {
-  failFast?: boolean; // Stop on first error or continue (default: true)
-}
-```
-
-#### `failFast`
-
-Controls whether the workflow stops immediately on the first error or continues executing remaining works:
-
-```typescript
-// Default: failFast: true - stops on first error
-const workflow = new Workflow<{ userId: string }>()
-  .serial({ name: 'work1', execute: async () => 'ok' })
-  .serial({
-    name: 'failing',
-    execute: async () => {
-      throw new Error('Stop here');
-    },
-  })
-  .serial({ name: 'work3', execute: async () => 'never runs' });
-// work3 will NOT execute
-
-// failFast: false - continues despite errors
-const workflow = new Workflow<{ userId: string }>({ failFast: false })
-  .serial({ name: 'work1', execute: async () => 'ok' })
-  .serial({
-    name: 'failing',
-    execute: async () => {
-      throw new Error('Continue anyway');
-    },
-  })
-  .serial({ name: 'work3', execute: async () => 'still runs' });
-// work3 WILL execute, but workflow still fails at the end
-
-const result = await workflow.run({ userId: '123' });
-// result.status === WorkflowStatus.Failed
-// result.error.message === 'Continue anyway' (first error)
-// result.context.workResults.get('work3')?.result === 'still runs'
-```
-
-You can combine `failFast: false` with work-level `silenceError` to run all works and complete successfully:
-
-```typescript
-const workflow = new Workflow<{ userId: string }>({ failFast: false })
-  .serial({
-    name: 'optional1',
-    execute: async () => {
-      throw new Error('Ignored');
-    },
-    silenceError: true,
-  })
-  .serial({
-    name: 'optional2',
-    execute: async () => {
-      throw new Error('Also ignored');
-    },
-    silenceError: true,
-  })
-  .serial({ name: 'final', execute: async () => 'done' });
-
-const result = await workflow.run({ userId: '123' });
-// result.status === WorkflowStatus.Completed (all errors silenced)
-```
-
-### `.run(initialData)`
-
-Execute the workflow with initial data.
-
-```typescript
-const result = await workflow.run({ userId: '123' });
-```
-
-### Result Object
-
-```typescript
-type WorkflowResult = {
-  status: WorkflowStatus; // WorkflowStatus.Completed | WorkflowStatus.Failed
-  context: {
-    data: TData; // Initial data passed to run()
-    workResults: IWorkResultsMap; // Type-safe map of work results
-  };
-  workResults: Map<string, WorkResult>; // Detailed results per work
-  totalDuration: number; // Total execution time in ms
-  error?: Error; // Error if workflow failed
-};
-
-// Each work result contains execution details
-type WorkResult<T> = {
-  status: WorkStatus; // WorkStatus.Completed | WorkStatus.Failed | WorkStatus.Skipped
-  result?: T; // The return value from execute()
-  error?: Error; // Error if work failed
-  duration: number; // Execution time in ms
-  parent?: string; // Parent group name (if nested in a group)
-};
-```
-
-### Accessing Work Results
-
-`ctx.workResults.get()` returns a `WorkResult` object, not the raw value:
-
-```typescript
-// Get the full work result with metadata
-const workResult = ctx.workResults.get('fetchUser');
-console.log(workResult.status); // WorkStatus.Completed | WorkStatus.Failed | WorkStatus.Skipped
-console.log(workResult.duration); // execution time in ms
-
-// Get just the return value
-const user = ctx.workResults.get('fetchUser').result;
-
-// Check status before accessing result
-if (workResult.status === WorkStatus.Completed) {
-  console.log('User:', workResult.result);
-}
-```
-
-> **Note:** `workResults.get()` throws an error if called for a work that hasn't executed yet. Use `workResults.has()` to check if a result exists.
 
 ## Conditional Execution
 
 Skip works based on runtime conditions:
 
 ```typescript
-workflow.serial({
-  name: 'sendEmail',
-  shouldRun: (ctx) => ctx.data.sendNotifications,
-  execute: async (ctx) => {
-    await sendEmail(ctx.data.email);
-    return { sent: true };
-  },
-});
-```
+const tree = Work.tree('notifications')
+  .addSerial({
+    name: 'sendEmail',
+    shouldRun: (ctx) => ctx.data.sendEmail,
+    execute: async () => ({ sent: true }),
+  })
+  .addSerial({
+    name: 'sendSms',
+    shouldRun: (ctx) => ctx.data.sendSms,
+    execute: async () => ({ sent: true }),
+  });
 
-Skipped works are still accessible via `workResults.get()` with `status: WorkStatus.Skipped`:
-
-```typescript
-const emailResult = ctx.workResults.get('sendEmail');
-if (emailResult.status === WorkStatus.Skipped) {
-  console.log('Email was skipped');
-} else if (emailResult.status === WorkStatus.Completed) {
-  console.log('Email sent:', emailResult.result);
-}
+// Only sendEmail executes
+await tree.run({ sendEmail: true, sendSms: false });
 ```
 
 ## Error Handling
 
-Handle errors at the work level:
+### `onError` Callback
+
+Handle errors without stopping the tree:
 
 ```typescript
-workflow.serial({
+tree.addSerial({
   name: 'riskyOperation',
-  execute: async (ctx) => {
-    if (Math.random() < 0.5) throw new Error('Random failure');
-    return 'success';
+  execute: async () => {
+    throw new Error('Something went wrong');
   },
   onError: async (error, ctx) => {
-    await logError(error, ctx.data);
-    // Error will still propagate and fail the workflow
+    console.error('Logged:', error.message);
+    // Don't throw → tree continues
+    // Throw → tree stops
   },
 });
 ```
 
-## Behavior Diagram
+### `silenceError` Option
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              Workflow.run()                                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-                        ┌─────────────────────────┐
-                        │   Initialize Context    │
-                        │   { data, workResults } │
-                        └─────────────────────────┘
-                                      │
-                                      ▼
-                        ┌─────────────────────────┐
-                        │   For each work item    │◄─────────────────┐
-                        └─────────────────────────┘                  │
-                                      │                              │
-                          ┌───────────┴───────────┐                  │
-                          ▼                       ▼                  │
-                    ┌──────────┐           ┌────────────┐            │
-                    │  Serial  │           │  Parallel  │            │
-                    └──────────┘           └────────────┘            │
-                          │                       │                  │
-                          ▼                       ▼                  │
-                ┌──────────────────┐   ┌────────────────────┐        │
-                │   shouldRun()?   │   │  For each work in  │        │
-                └──────────────────┘   │      parallel      │        │
-                    │           │      └────────────────────┘        │
-                   Yes          No              │                    │
-                    │           │      ┌────────┼────────┐           │
-                    ▼           ▼      ▼        ▼        ▼           │
-            ┌───────────┐  ┌────────┐ ┌──┐    ┌──┐    ┌──┐           │
-            │ execute() │  │ SKIP   │ │W1│    │W2│    │W3│           │
-            └───────────┘  └────────┘ └──┘    └──┘    └──┘           │
-                    │                   │       │       │            │
-                    ▼                   └───────┴───────┘            │
-            ┌───────────────┐                   │                    │
-            │ Store result  │                   ▼                    │
-            │ in context    │       ┌─────────────────────┐          │
-            └───────────────┘       │  Promise.all()      │          │
-                    │               │  (concurrent exec)  │          │
-                    │               └─────────────────────┘          │
-                    ▼                          │                     │
-            ┌───────────────┐       ┌─────────────────────┐          │
-            │    Success    │       │  Collect results    │          │
-            └───────────────┘       │  Check for errors   │          │
-                    │               └─────────────────────┘          │
-                    │                          │                     │
-                    └──────────────┬───────────┘                     │
-                                   │                                 │
-                                   ▼                                 │
-                         ┌─────────────────┐                         │
-                         │  More works?    │─────────Yes─────────────┘
-                         └─────────────────┘
-                                   │
-                                  No
-                                   │
-                                   ▼
-                    ┌─────────────────────────────┐
-                    │      Return Result          │
-                    │  { status, workResults,     │
-                    │    context, totalDuration } │
-                    └─────────────────────────────┘
+Continue execution even when work fails (no `onError` called):
+
+```typescript
+tree.addSerial({
+  name: 'optionalStep',
+  silenceError: true,
+  execute: async () => {
+    throw new Error('This error is silenced');
+  },
+});
 ```
 
-## Execution Timeline
+### `failFast` Option
 
+Control whether parallel execution stops on first error:
+
+```typescript
+// Default: failFast is true - stops on first error
+const tree1 = Work.tree('tree'); // failFast: true
+
+// With failFast: false - continues and collects all errors
+const tree2 = Work.tree('tree', { failFast: false })
+  .addParallel([
+    {
+      name: 'task1',
+      execute: async () => {
+        throw new Error('Error 1');
+      },
+    },
+    { name: 'task2', execute: async () => 'success' },
+    {
+      name: 'task3',
+      execute: async () => {
+        throw new Error('Error 3');
+      },
+    },
+  ])
+  .addSerial({
+    name: 'afterParallel',
+    execute: async () => 'continued', // This runs even with errors above
+  });
+
+const result = await tree2.run({});
+// result.status === WorkStatus.Completed
+// Individual work statuses show which failed
 ```
-Time ──────────────────────────────────────────────────────────────────►
 
-     ┌──────────────┐
-     │   validate   │
-     │   (serial)   │
-     └──────────────┘
-                     ┌──────────────┐
-                     │ fetchOrders  │
-                     │  (parallel)  ├──────────┐
-                     └──────────────┘          │
-                     ┌──────────────┐          │ concurrent
-                     │ fetchProfile │          │
-                     │  (parallel)  ├──────────┘
-                     └──────────────┘
-                                    ┌──────────────┐
-                                    │   process    │
-                                    │   (serial)   │
-                                    └──────────────┘
+### Checking Work Status
+
+```typescript
+const workResult = result.context.workResults.get('workName');
+
+switch (workResult.status) {
+  case WorkStatus.Completed:
+    console.log('Result:', workResult.result);
+    break;
+  case WorkStatus.Failed:
+    console.log('Error:', workResult.error);
+    break;
+  case WorkStatus.Skipped:
+    console.log('Work was skipped');
+    break;
+}
 ```
 
-## Development
+## WorkResult Structure
+
+```typescript
+type WorkResult<T> = {
+  status: WorkStatus; // Completed | Failed | Skipped
+  result?: T; // The return value (if completed)
+  error?: Error; // The error (if failed)
+  duration: number; // Execution time in ms
+  parent?: string; // Parent tree name (if nested)
+};
+```
+
+## TreeResult Structure
+
+```typescript
+type TreeResult<TData, TWorkResults> = {
+  status: WorkStatus; // Completed | Failed
+  context: {
+    data: TData; // Input data
+    workResults: IWorkResultsMap<TWorkResults>;
+  };
+  workResults: Map<keyof TWorkResults, WorkResult>;
+  totalDuration: number; // Total time in ms
+  error?: Error; // First error (if failed)
+};
+```
+
+## Type Safety
+
+The library provides full type inference for work names and results:
+
+```typescript
+const tree = Work.tree('typed')
+  .addSerial({
+    name: 'step1',
+    execute: async () => ({ count: 42 }),
+  })
+  .addSerial({
+    name: 'step2',
+    execute: async (ctx) => {
+      // ✅ TypeScript knows 'step1' exists
+      const result = ctx.workResults.get('step1').result;
+      // ✅ TypeScript infers result type: { count: number }
+      return result.count * 2;
+    },
+  });
+
+// ✅ Autocomplete works for work names
+const result = await tree.run({});
+result.context.workResults.get('step1'); // ✅
+result.context.workResults.get('invalid'); // ❌ TypeScript error
+```
+
+## Examples
+
+See the `examples/` folder for complete examples:
+
+- `basic.ts` - Simple serial execution
+- `parallel.ts` - Concurrent execution
+- `conditional.ts` - Skip steps with shouldRun
+- `error-handling.ts` - Error handling patterns
+- `work-class.ts` - Reusable Work instances
+- `tree-work.ts` - Nested tree structures
+- `sealed.ts` - Sealing trees to prevent modifications
+
+Run any example:
 
 ```bash
-# Install dependencies
-npm install
-
-# Run tests
-npm test
-
-# Run tests in watch mode
-npm run test:watch
-
-# Build the library
-npm run build
-
-# Type check
-npm run lint
+npx tsx examples/basic.ts
 ```
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feat/amazing-feature`)
-3. Commit your changes using [Conventional Commits](https://www.conventionalcommits.org/):
-   - `feat:` for new features (minor version bump)
-   - `fix:` for bug fixes (patch version bump)
-   - `feat!:` or `BREAKING CHANGE:` for breaking changes (major version bump)
-4. Push to the branch (`git push origin feat/amazing-feature`)
-5. Open a Pull Request
-
-This project uses [Release Please](https://github.com/googleapis/release-please) for automated releases. When your PR is merged:
-
-- A release PR is automatically created/updated
-- Merging the release PR publishes to npm with provenance
 
 ## License
 
-MIT
+MIT © Yiğit Ahmet Şahin

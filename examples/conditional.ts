@@ -1,18 +1,11 @@
 /**
- * Conditional workflow example - Skip steps based on conditions
+ * Conditional example - Skip steps based on conditions with Work.tree()
  */
-import { Workflow } from '../src';
-
-interface NotificationData {
-  userId: string;
-  sendEmail: boolean;
-  sendSms: boolean;
-  sendPush: boolean;
-}
+import { Work } from '../src';
 
 async function main() {
-  const workflow = new Workflow<NotificationData>()
-    .serial({
+  const tree = Work.tree('notifications')
+    .addSerial({
       name: 'fetchUserPreferences',
       execute: async (ctx) => {
         console.log(`Fetching preferences for user: ${ctx.data.userId}`);
@@ -23,9 +16,9 @@ async function main() {
         };
       },
     })
-    .serial({
+    .addSerial({
       name: 'sendEmailNotification',
-      shouldRun: (ctx) => ctx.data.sendEmail,
+      shouldRun: (ctx) => Boolean(ctx.data.sendEmail),
       execute: async (ctx) => {
         const prefs = ctx.workResults.get('fetchUserPreferences').result;
         console.log(`📧 Sending email to: ${prefs?.email}`);
@@ -33,9 +26,9 @@ async function main() {
         return { type: 'email', sent: true };
       },
     })
-    .serial({
+    .addSerial({
       name: 'sendSmsNotification',
-      shouldRun: (ctx) => ctx.data.sendSms,
+      shouldRun: (ctx) => Boolean(ctx.data.sendSms),
       execute: async (ctx) => {
         const prefs = ctx.workResults.get('fetchUserPreferences').result;
         console.log(`📱 Sending SMS to: ${prefs?.phone}`);
@@ -43,9 +36,9 @@ async function main() {
         return { type: 'sms', sent: true };
       },
     })
-    .serial({
+    .addSerial({
       name: 'sendPushNotification',
-      shouldRun: (ctx) => ctx.data.sendPush,
+      shouldRun: (ctx) => Boolean(ctx.data.sendPush),
       execute: async (ctx) => {
         const prefs = ctx.workResults.get('fetchUserPreferences').result;
         console.log(`🔔 Sending push to device: ${prefs?.deviceToken}`);
@@ -53,7 +46,7 @@ async function main() {
         return { type: 'push', sent: true };
       },
     })
-    .serial({
+    .addSerial({
       name: 'logNotifications',
       execute: async (ctx) => {
         const sent: string[] = [];
@@ -65,7 +58,7 @@ async function main() {
     });
 
   console.log('=== Scenario 1: Email only ===\n');
-  let result = await workflow.run({
+  let result = await tree.run({
     userId: 'user-1',
     sendEmail: true,
     sendSms: false,
@@ -74,7 +67,7 @@ async function main() {
   console.log('Result:', result.context.workResults.get('logNotifications').result);
 
   console.log('\n=== Scenario 2: All notifications ===\n');
-  result = await workflow.run({
+  result = await tree.run({
     userId: 'user-2',
     sendEmail: true,
     sendSms: true,
@@ -83,7 +76,7 @@ async function main() {
   console.log('Result:', result.context.workResults.get('logNotifications').result);
 
   console.log('\n=== Scenario 3: No notifications ===\n');
-  result = await workflow.run({
+  result = await tree.run({
     userId: 'user-3',
     sendEmail: false,
     sendSms: false,
