@@ -127,6 +127,87 @@ workflow.parallel([
 ]);
 ```
 
+#### Nested Groups
+
+You can nest serial or parallel groups inside `.parallel()` for complex workflow structures. **Type inference supports up to 5 levels of nesting** - all work names and their result types are fully inferred!
+
+```typescript
+import { Workflow, WorkStatus } from '@yigitahmetsahin/workflow-ts';
+
+const workflow = new Workflow<{ userId: string }>().parallel([
+  // A serial group: works execute in sequence
+  {
+    name: 'addressCollection',
+    serial: [
+      {
+        name: 'collectAddressPrimary',
+        execute: async () => fetchAddressPrimary(),
+        silenceError: true, // Don't fail if primary fails
+      },
+      {
+        name: 'collectAddressFallback',
+        // For sibling works, use has() + Map access (siblings aren't known at compile time)
+        shouldRun: (ctx) => {
+          if (ctx.workResults.has('collectAddressPrimary')) {
+            const result = (ctx.workResults as unknown as Map<string, { status: WorkStatus }>).get(
+              'collectAddressPrimary'
+            );
+            return result?.status === WorkStatus.Failed;
+          }
+          return false;
+        },
+        execute: async () => fetchAddressFallback(),
+      },
+    ],
+  },
+  // A parallel group: works execute concurrently
+  {
+    name: 'dataFetch',
+    parallel: [
+      { name: 'fetchOrders', execute: async () => fetchOrders() },
+      { name: 'fetchProfile', execute: async () => fetchProfile() },
+    ],
+  },
+  // Regular work: runs in parallel with the groups
+  { name: 'fetchHistory', execute: async () => fetchHistory() },
+]);
+
+const result = await workflow.run({ userId: '123' });
+
+// Type inference works for all nested works (up to 5 levels)!
+const address = result.context.workResults.get('collectAddressFallback').result;
+const orders = result.context.workResults.get('fetchOrders').result;
+const history = result.context.workResults.get('fetchHistory').result;
+
+// Track parent relationships via the parent field
+console.log(result.context.workResults.get('collectAddressPrimary').parent); // 'addressCollection'
+console.log(result.context.workResults.get('fetchOrders').parent); // 'dataFetch'
+console.log(result.context.workResults.get('fetchHistory').parent); // undefined
+```
+
+**Type inference details:**
+
+- **Up to 5 levels**: Works nested inside groups, inside groups, etc. are all type-inferred
+- **Sibling works**: For accessing sibling works in `shouldRun`/`execute` within the same group, use `has()` + Map access (siblings aren't known at compile time)
+- **Mutually exclusive**: A definition must have either `execute` (work) OR `serial`/`parallel` (group), not both
+
+**Group result types:**
+
+- **Serial group**: Result is the last inner work's return value
+- **Parallel group**: Result is an object mapping inner work names to their results
+
+**Groups support all work options:**
+
+```typescript
+{
+  name: 'myGroup',
+  serial: [...],
+  shouldRun: (ctx) => true,      // Skip entire group if false
+  onError: (error, ctx) => {},   // Handle group errors
+  silenceError: true,            // Don't fail workflow on group error
+}
+```
+
 ### `Work` Class
 
 Define standalone, reusable work units using the `Work` class:
@@ -392,6 +473,7 @@ type WorkResult<T> = {
   result?: T; // The return value from execute()
   error?: Error; // Error if work failed
   duration: number; // Execution time in ms
+  parent?: string; // Parent group name (if nested in a group)
 };
 ```
 

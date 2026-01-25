@@ -1,4 +1,5 @@
-import { IWorkDefinition, IWorkflowContext } from './workflow.types';
+import { IWorkflowContext } from './workflow.types';
+import { IWorkDefinition } from './work.types';
 
 /**
  * A standalone Work unit that can be added to workflows.

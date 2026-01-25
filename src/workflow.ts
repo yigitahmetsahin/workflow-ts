@@ -1,46 +1,24 @@
 import {
   IWorkflowContext,
   WorkflowResult,
-  IWorkResultsMap,
   WorkflowWork,
-  IWorkDefinition,
-  WorkResult,
   IWorkflow,
   SealedWorkflow,
   SealingWorkDefinition,
   WorkflowOptions,
   ParallelWorksToRecord,
-  WorkStatus,
   WorkflowStatus,
 } from './workflow.types';
+import {
+  IWorkDefinition,
+  WorkResult,
+  WorkStatus,
+  ParallelInput,
+  IGroupWorkDefinition,
+} from './work.types';
 import { WorkInput, getWorkDefinition } from './work';
-
-/**
- * Internal implementation of IWorkResultsMap using a Map
- */
-class WorkResultsMap<
-  TWorkResults extends Record<string, unknown>,
-> implements IWorkResultsMap<TWorkResults> {
-  private map = new Map<keyof TWorkResults, WorkResult<unknown>>();
-
-  get<K extends keyof TWorkResults>(name: K): WorkResult<TWorkResults[K]> {
-    const result = this.map.get(name);
-    if (!result) {
-      throw new Error(
-        `Work result "${String(name)}" not found. This work may not have executed yet.`
-      );
-    }
-    return result as WorkResult<TWorkResults[K]>;
-  }
-
-  set<K extends keyof TWorkResults>(name: K, value: WorkResult<TWorkResults[K]>): void {
-    this.map.set(name, value);
-  }
-
-  has<K extends keyof TWorkResults>(name: K): boolean {
-    return this.map.has(name);
-  }
-}
+import { WorkResultsMap } from './work-results-map';
+import { isGroupWorkDefinition } from './type-guards';
 
 /**
  * A simple, extensible workflow engine that supports serial and parallel work execution.
@@ -131,27 +109,45 @@ export class Workflow<
 
   /**
    * Add parallel works to the workflow.
-   * Accepts an array of work definitions or Work instances.
+   * Accepts an array of work definitions, Work instances, or group work definitions.
    * All work names and result types are automatically inferred.
    * @throws Error if the workflow is sealed
    *
    * @example
    * ```typescript
+   * // Regular parallel works
    * workflow.parallel([
    *   { name: 'work1', execute: async () => 'result1' },
    *   { name: 'work2', execute: async () => 123 },
    * ]);
+   *
+   * // With nested groups
+   * workflow.parallel([
+   *   {
+   *     name: 'addressGroup',
+   *     serial: [
+   *       { name: 'fetchAddress', execute: async () => address },
+   *       { name: 'validateAddress', execute: async () => validated },
+   *     ],
+   *   },
+   *   { name: 'fetchHistory', execute: async () => history },
+   * ]);
    * ```
    */
-  parallel<const TParallelWorks extends readonly WorkInput<string, TData, unknown, TWorkResults>[]>(
-    works: TParallelWorks
-  ): Workflow<TData, TWorkResults & ParallelWorksToRecord<TParallelWorks>> {
+  parallel<
+    const TParallelWorks extends readonly ParallelInput<string, TData, unknown, TWorkResults>[],
+  >(works: TParallelWorks): Workflow<TData, TWorkResults & ParallelWorksToRecord<TParallelWorks>> {
     if (this._sealed) {
       throw new Error('Cannot add work to a sealed workflow');
     }
     this._works.push({
       type: 'parallel',
-      works: works.map((w) => getWorkDefinition(w)),
+      works: works.map((w) => {
+        if (isGroupWorkDefinition(w)) {
+          return w;
+        }
+        return getWorkDefinition(w as WorkInput<string, TData, unknown, TWorkResults>);
+      }),
     });
     return this as Workflow<TData, TWorkResults & ParallelWorksToRecord<TParallelWorks>>;
   }
@@ -214,7 +210,13 @@ export class Workflow<
       for (const workGroup of this._works) {
         try {
           if (workGroup.type === 'serial') {
-            await this.executeWork(workGroup.works[0], context, workResults);
+            // Serial works are always regular work definitions (not groups)
+
+            await this.executeWork(
+              workGroup.works[0] as IWorkDefinition<string, TData, any, any>,
+              context,
+              workResults
+            );
           } else {
             await this.executeParallelWorks(workGroup.works, context, workResults);
           }
@@ -329,30 +331,32 @@ export class Workflow<
    */
   private async executeParallelWorks(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    works: IWorkDefinition<string, TData, any, any>[],
+    works: (IWorkDefinition<string, TData, any, any> | IGroupWorkDefinition<string, TData, any>)[],
     context: IWorkflowContext<TData, TWorkResults>,
     workResults: Map<keyof TWorkResults, WorkResult>
   ): Promise<void> {
     // Helper to store failed result
-    const storeFailedResult = (
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      work: IWorkDefinition<string, TData, any, any>,
-      err: Error,
-      duration: number
-    ) => {
+    const storeFailedResult = (name: string, err: Error, duration: number, parent?: string) => {
       const failedResult: WorkResult = {
         status: WorkStatus.Failed,
         error: err,
         duration,
+        parent,
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      context.workResults.set(work.name as keyof TWorkResults, failedResult as any);
-      workResults.set(work.name as keyof TWorkResults, failedResult);
+      context.workResults.set(name as keyof TWorkResults, failedResult as any);
+      workResults.set(name as keyof TWorkResults, failedResult);
     };
 
     const promises = works.map(async (work) => {
       const workStartTime = Date.now();
 
+      // Check if this is a group work
+      if (isGroupWorkDefinition(work)) {
+        return this.executeGroupWork(work, context, workResults, workStartTime);
+      }
+
+      // Regular work execution
       // Check if work should run
       if (work.shouldRun) {
         const shouldRun = await work.shouldRun(context);
@@ -364,21 +368,21 @@ export class Workflow<
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           context.workResults.set(work.name as keyof TWorkResults, skippedResult as any);
           workResults.set(work.name as keyof TWorkResults, skippedResult);
-          return { work, skipped: true };
+          return { name: work.name, skipped: true };
         }
       }
 
       try {
         const result = await work.execute(context);
-        return { work, result, startTime: workStartTime };
+        return { name: work.name, result, startTime: workStartTime };
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
         const duration = Date.now() - workStartTime;
 
         // If silenceError is true, store result and continue (no onError call)
         if (work.silenceError) {
-          storeFailedResult(work, err, duration);
-          return { work, handled: true };
+          storeFailedResult(work.name, err, duration);
+          return { name: work.name, handled: true };
         }
 
         // If onError exists, call it immediately
@@ -387,16 +391,16 @@ export class Workflow<
           try {
             await work.onError(err, context);
             // onError didn't throw - error is handled
-            storeFailedResult(work, err, duration);
-            return { work, handled: true };
+            storeFailedResult(work.name, err, duration);
+            return { name: work.name, handled: true };
           } catch {
             // onError threw - propagate the error
-            return { work, error: err, startTime: workStartTime };
+            return { name: work.name, error: err, startTime: workStartTime };
           }
         }
 
         // No onError - propagate the error
-        return { work, error: err, startTime: workStartTime };
+        return { name: work.name, error: err, startTime: workStartTime };
       }
     });
 
@@ -422,8 +426,8 @@ export class Workflow<
           duration,
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        context.workResults.set(result.work.name as keyof TWorkResults, failedResult as any);
-        workResults.set(result.work.name as keyof TWorkResults, failedResult);
+        context.workResults.set(result.name as keyof TWorkResults, failedResult as any);
+        workResults.set(result.name as keyof TWorkResults, failedResult);
         errors.push(result.error);
       } else {
         // Success
@@ -433,14 +437,336 @@ export class Workflow<
           duration,
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        context.workResults.set(result.work.name as keyof TWorkResults, completedResult as any);
-        workResults.set(result.work.name as keyof TWorkResults, completedResult);
+        context.workResults.set(result.name as keyof TWorkResults, completedResult as any);
+        workResults.set(result.name as keyof TWorkResults, completedResult);
       }
     }
 
     // Throw the first error to stop workflow
     if (errors.length > 0) {
       throw errors[0];
+    }
+  }
+
+  /**
+   * Execute a group work (serial or parallel inner works)
+   */
+  private async executeGroupWork(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    group: IGroupWorkDefinition<string, TData, any>,
+    context: IWorkflowContext<TData, TWorkResults>,
+    workResults: Map<keyof TWorkResults, WorkResult>,
+    groupStartTime: number
+  ): Promise<{
+    name: string;
+    result?: unknown;
+    error?: Error;
+    skipped?: boolean;
+    handled?: boolean;
+    startTime: number;
+  }> {
+    // Check if group should run
+    if (group.shouldRun) {
+      const shouldRun = await group.shouldRun(context);
+      if (!shouldRun) {
+        const skippedResult: WorkResult = {
+          status: WorkStatus.Skipped,
+          duration: Date.now() - groupStartTime,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        context.workResults.set(group.name as keyof TWorkResults, skippedResult as any);
+        workResults.set(group.name as keyof TWorkResults, skippedResult);
+        return { name: group.name, skipped: true, startTime: groupStartTime };
+      }
+    }
+
+    const innerWorks = group.serial || group.parallel || [];
+    const isSerial = !!group.serial;
+
+    try {
+      let groupResult: unknown;
+
+      if (isSerial) {
+        // Execute inner works serially
+        groupResult = await this.executeSerialGroup(innerWorks, context, workResults, group.name);
+      } else {
+        // Execute inner works in parallel
+        groupResult = await this.executeParallelGroup(innerWorks, context, workResults, group.name);
+      }
+
+      // Store group result
+      const completedResult: WorkResult = {
+        status: WorkStatus.Completed,
+        result: groupResult,
+        duration: Date.now() - groupStartTime,
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      context.workResults.set(group.name as keyof TWorkResults, completedResult as any);
+      workResults.set(group.name as keyof TWorkResults, completedResult);
+
+      return { name: group.name, result: groupResult, startTime: groupStartTime };
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const duration = Date.now() - groupStartTime;
+
+      // Store failed result for the group
+      const failedResult: WorkResult = {
+        status: WorkStatus.Failed,
+        error: err,
+        duration,
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      context.workResults.set(group.name as keyof TWorkResults, failedResult as any);
+      workResults.set(group.name as keyof TWorkResults, failedResult);
+
+      // If silenceError is true, don't propagate
+      if (group.silenceError) {
+        return { name: group.name, handled: true, startTime: groupStartTime };
+      }
+
+      // If onError exists, call it
+      if (group.onError) {
+        try {
+          await group.onError(err, context);
+          // onError didn't throw - error is handled
+          return { name: group.name, handled: true, startTime: groupStartTime };
+        } catch {
+          // onError threw - propagate the error
+          return { name: group.name, error: err, startTime: groupStartTime };
+        }
+      }
+
+      // No error handling - propagate
+      return { name: group.name, error: err, startTime: groupStartTime };
+    }
+  }
+
+  /**
+   * Execute inner works of a group serially
+   * Returns the result of the last work
+   */
+  private async executeSerialGroup(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    works: readonly ParallelInput<string, TData, any, any>[],
+    context: IWorkflowContext<TData, TWorkResults>,
+    workResults: Map<keyof TWorkResults, WorkResult>,
+    parentName: string
+  ): Promise<unknown> {
+    let lastResult: unknown;
+
+    for (const work of works) {
+      if (isGroupWorkDefinition(work)) {
+        // Nested group
+        const groupStartTime = Date.now();
+        const result = await this.executeGroupWork(work, context, workResults, groupStartTime);
+        // Set parent for the nested group
+        const groupWorkResult = workResults.get(work.name as keyof TWorkResults);
+        if (groupWorkResult) {
+          groupWorkResult.parent = parentName;
+        }
+        if (result.error) {
+          throw result.error;
+        }
+        lastResult = result.result;
+      } else {
+        // Regular work
+        await this.executeWorkWithParent(
+          work as IWorkDefinition<string, TData, unknown, TWorkResults>,
+          context,
+          workResults,
+          parentName
+        );
+        const workResult = context.workResults.get(work.name as keyof TWorkResults);
+        if (workResult.status === WorkStatus.Failed && !work.silenceError) {
+          throw workResult.error;
+        }
+        lastResult = workResult.result;
+      }
+    }
+
+    return lastResult;
+  }
+
+  /**
+   * Execute inner works of a group in parallel
+   * Returns an object mapping work names to their results
+   */
+  private async executeParallelGroup(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    works: readonly ParallelInput<string, TData, any, any>[],
+    context: IWorkflowContext<TData, TWorkResults>,
+    workResults: Map<keyof TWorkResults, WorkResult>,
+    parentName: string
+  ): Promise<Record<string, unknown>> {
+    const results: Record<string, unknown> = {};
+    const errors: Error[] = [];
+
+    const promises = works.map(async (work) => {
+      const workStartTime = Date.now();
+
+      if (isGroupWorkDefinition(work)) {
+        // Nested group
+        const result = await this.executeGroupWork(work, context, workResults, workStartTime);
+        // Set parent for the nested group
+        const groupWorkResult = workResults.get(work.name as keyof TWorkResults);
+        if (groupWorkResult) {
+          groupWorkResult.parent = parentName;
+        }
+        return result;
+      }
+
+      // Regular work - execute with parent tracking
+      const workDef = work as IWorkDefinition<string, TData, unknown, TWorkResults>;
+
+      // Check if work should run
+      if (workDef.shouldRun) {
+        const shouldRun = await workDef.shouldRun(context);
+        if (!shouldRun) {
+          const skippedResult: WorkResult = {
+            status: WorkStatus.Skipped,
+            duration: Date.now() - workStartTime,
+            parent: parentName,
+          };
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          context.workResults.set(workDef.name as keyof TWorkResults, skippedResult as any);
+          workResults.set(workDef.name as keyof TWorkResults, skippedResult);
+          return { name: workDef.name, skipped: true, startTime: workStartTime };
+        }
+      }
+
+      try {
+        const result = await workDef.execute(context);
+        const completedResult: WorkResult = {
+          status: WorkStatus.Completed,
+          result,
+          duration: Date.now() - workStartTime,
+          parent: parentName,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        context.workResults.set(workDef.name as keyof TWorkResults, completedResult as any);
+        workResults.set(workDef.name as keyof TWorkResults, completedResult);
+        return { name: workDef.name, result, startTime: workStartTime };
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        const duration = Date.now() - workStartTime;
+
+        const failedResult: WorkResult = {
+          status: WorkStatus.Failed,
+          error: err,
+          duration,
+          parent: parentName,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        context.workResults.set(workDef.name as keyof TWorkResults, failedResult as any);
+        workResults.set(workDef.name as keyof TWorkResults, failedResult);
+
+        // Handle error based on work settings
+        if (workDef.silenceError) {
+          return { name: workDef.name, handled: true, startTime: workStartTime };
+        }
+
+        if (workDef.onError) {
+          try {
+            await workDef.onError(err, context);
+            return { name: workDef.name, handled: true, startTime: workStartTime };
+          } catch {
+            return { name: workDef.name, error: err, startTime: workStartTime };
+          }
+        }
+
+        return { name: workDef.name, error: err, startTime: workStartTime };
+      }
+    });
+
+    const parallelResults = await Promise.all(promises);
+
+    // Collect results and errors
+    for (const result of parallelResults) {
+      if ('error' in result && result.error) {
+        errors.push(result.error);
+      } else if (
+        !('skipped' in result && result.skipped) &&
+        !('handled' in result && result.handled)
+      ) {
+        results[result.name] = result.result;
+      }
+    }
+
+    if (errors.length > 0) {
+      throw errors[0];
+    }
+
+    return results;
+  }
+
+  /**
+   * Execute a single work with parent tracking
+   */
+  private async executeWorkWithParent(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    work: IWorkDefinition<string, TData, any, any>,
+    context: IWorkflowContext<TData, TWorkResults>,
+    workResults: Map<keyof TWorkResults, WorkResult>,
+    parentName: string
+  ): Promise<void> {
+    const workStartTime = Date.now();
+
+    // Check if work should run
+    if (work.shouldRun) {
+      const shouldRun = await work.shouldRun(context);
+      if (!shouldRun) {
+        const skippedResult: WorkResult = {
+          status: WorkStatus.Skipped,
+          duration: Date.now() - workStartTime,
+          parent: parentName,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        context.workResults.set(work.name as keyof TWorkResults, skippedResult as any);
+        workResults.set(work.name as keyof TWorkResults, skippedResult);
+        return;
+      }
+    }
+
+    try {
+      const result = await work.execute(context);
+
+      const workResult: WorkResult = {
+        status: WorkStatus.Completed,
+        result,
+        duration: Date.now() - workStartTime,
+        parent: parentName,
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      context.workResults.set(work.name as keyof TWorkResults, workResult as any);
+      workResults.set(work.name as keyof TWorkResults, workResult);
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+
+      const failedResult: WorkResult = {
+        status: WorkStatus.Failed,
+        error: err,
+        duration: Date.now() - workStartTime,
+        parent: parentName,
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      context.workResults.set(work.name as keyof TWorkResults, failedResult as any);
+      workResults.set(work.name as keyof TWorkResults, failedResult);
+
+      // If silenceError is true, don't throw
+      if (work.silenceError) {
+        return;
+      }
+
+      // If onError handler exists, let it decide
+      if (work.onError) {
+        await work.onError(err, context);
+        return;
+      }
+
+      // No handling - throw
+      throw err;
     }
   }
 }

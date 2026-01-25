@@ -1,13 +1,9 @@
-/**
- * Work Status
- */
-export enum WorkStatus {
-  Pending = 'pending',
-  Running = 'running',
-  Completed = 'completed',
-  Failed = 'failed',
-  Skipped = 'skipped',
-}
+import type {
+  WorkResult,
+  IWorkDefinition,
+  IGroupWorkDefinition,
+  ParallelInput,
+} from './work.types';
 
 /**
  * Workflow Status
@@ -17,6 +13,19 @@ export enum WorkflowStatus {
   Running = 'running',
   Completed = 'completed',
   Failed = 'failed',
+}
+
+/**
+ * Type-safe map for work results with automatic type inference
+ */
+export interface IWorkResultsMap<
+  TWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> {
+  /** Get a work result with compile-time type checking */
+  get<K extends keyof TWorkResults>(name: K): WorkResult<TWorkResults[K]>;
+  set<K extends keyof TWorkResults>(name: K, value: WorkResult<TWorkResults[K]>): void;
+  /** Check if a work result exists */
+  has(name: string): boolean;
 }
 
 /**
@@ -35,61 +44,12 @@ export interface IWorkflowContext<
 }
 
 /**
- * Type-safe map for work results with automatic type inference
- */
-export interface IWorkResultsMap<
-  TWorkResults extends Record<string, unknown> = Record<string, unknown>,
-> {
-  /** Get a work result with compile-time type checking */
-  get<K extends keyof TWorkResults>(name: K): WorkResult<TWorkResults[K]>;
-  set<K extends keyof TWorkResults>(name: K, value: WorkResult<TWorkResults[K]>): void;
-  /** Check if a work result exists */
-  has(name: string): boolean;
-}
-
-/**
- * Result of a single work execution
- */
-export type WorkResult<TResult = unknown> = {
-  status: WorkStatus;
-  result?: TResult;
-  error?: Error;
-  duration: number;
-};
-
-/**
- * Definition of a work with inferred name and result type
- */
-export interface IWorkDefinition<
-  TName extends string,
-  TData = Record<string, unknown>,
-  TResult = unknown,
-  TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
-> {
-  /** Unique name for the work */
-  name: TName;
-  /** Execute function - receives context and returns result */
-  execute: (context: IWorkflowContext<TData, TAvailableWorkResults>) => Promise<TResult>;
-  /** Optional: condition to determine if work should run */
-  shouldRun?: (
-    context: IWorkflowContext<TData, TAvailableWorkResults>
-  ) => boolean | Promise<boolean>;
-  /** Optional: called when work fails */
-  onError?: (
-    error: Error,
-    context: IWorkflowContext<TData, TAvailableWorkResults>
-  ) => void | Promise<void>;
-  /** Optional: if true, errors won't stop the workflow (result will be undefined) */
-  silenceError?: boolean;
-}
-
-/**
  * Internal work representation
  */
 export type WorkflowWork = {
   type: 'serial' | 'parallel';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  works: IWorkDefinition<string, any, any, any>[];
+  works: (IWorkDefinition<string, any, any, any> | IGroupWorkDefinition<string, any, any>)[];
 };
 
 /**
@@ -197,18 +157,163 @@ export type WorkflowOptions = {
 };
 
 /**
+ * Helper type to extract the result type from a parallel input (work or group)
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ExtractParallelInputResult<T extends ParallelInput<string, any, any, any>> =
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  T extends IWorkDefinition<string, any, infer R, any>
+    ? R
+    : // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      T extends IGroupWorkDefinition<string, any, any>
+      ? T['serial'] extends readonly unknown[]
+        ? // Serial group result is the last work's result type (simplified to unknown for now)
+          unknown
+        : T['parallel'] extends readonly unknown[]
+          ? // Parallel group result is object mapping names to results (simplified to unknown for now)
+            unknown
+          : never
+      : never;
+
+// ============================================================================
+// Type inference for nested groups - supports up to 5 levels of nesting
+// ============================================================================
+
+/**
+ * Extract inner works array from a group (serial or parallel)
+ */
+
+type GetInnerWorks<T> =
+  T extends IGroupWorkDefinition<string, any, any>
+    ? T['serial'] extends readonly (infer U)[]
+      ? U
+      : T['parallel'] extends readonly (infer U2)[]
+        ? U2
+        : never
+    : never;
+
+/**
+ * Extract name from any input (work or group)
+ */
+type GetName<T> = T extends { name: infer N extends string } ? N : never;
+
+/**
+ * Extract result type from a work definition
+ */
+
+type GetWorkResult<T, K extends string> =
+  T extends IWorkDefinition<K, any, infer R, any> ? R : never;
+
+// --- Level 0: Direct inputs ---
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type NamesL0<T extends ParallelInput<string, any, any, any>> = GetName<T>;
+
+// --- Level 1: Inside first level of groups ---
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type NamesL1<T extends ParallelInput<string, any, any, any>> = GetName<GetInnerWorks<T>>;
+
+// --- Level 2: Inside second level of groups ---
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type NamesL2<T extends ParallelInput<string, any, any, any>> = GetName<
+  GetInnerWorks<GetInnerWorks<T>>
+>;
+
+// --- Level 3: Inside third level of groups ---
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type NamesL3<T extends ParallelInput<string, any, any, any>> = GetName<
+  GetInnerWorks<GetInnerWorks<GetInnerWorks<T>>>
+>;
+
+// --- Level 4: Inside fourth level of groups ---
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type NamesL4<T extends ParallelInput<string, any, any, any>> = GetName<
+  GetInnerWorks<GetInnerWorks<GetInnerWorks<GetInnerWorks<T>>>>
+>;
+
+/**
+ * Extract all names from a parallel input (up to 5 levels deep)
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ExtractAllNames<T extends ParallelInput<string, any, any, any>> =
+  | NamesL0<T>
+  | NamesL1<T>
+  | NamesL2<T>
+  | NamesL3<T>
+  | NamesL4<T>;
+
+// --- Result type lookups at each level ---
+
+// Level 0: Direct input
+type ResultL0<
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  T extends ParallelInput<string, any, any, any>,
+  K extends string,
+> = GetWorkResult<T, K>;
+
+// Level 1: Inside groups
+type ResultL1<
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  T extends ParallelInput<string, any, any, any>,
+  K extends string,
+> = GetWorkResult<GetInnerWorks<T>, K>;
+
+// Level 2: Inside nested groups
+type ResultL2<
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  T extends ParallelInput<string, any, any, any>,
+  K extends string,
+> = GetWorkResult<GetInnerWorks<GetInnerWorks<T>>, K>;
+
+// Level 3: Inside deeply nested groups
+type ResultL3<
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  T extends ParallelInput<string, any, any, any>,
+  K extends string,
+> = GetWorkResult<GetInnerWorks<GetInnerWorks<GetInnerWorks<T>>>, K>;
+
+// Level 4: Inside very deeply nested groups
+type ResultL4<
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  T extends ParallelInput<string, any, any, any>,
+  K extends string,
+> = GetWorkResult<GetInnerWorks<GetInnerWorks<GetInnerWorks<GetInnerWorks<T>>>>, K>;
+
+/**
+ * Find result type for a name across all levels (up to 5 levels deep)
+ * Returns the first non-never match, or unknown for groups
+ */
+type FindResultType<
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  T extends ParallelInput<string, any, any, any>,
+  K extends string,
+> =
+  ResultL0<T, K> extends never
+    ? ResultL1<T, K> extends never
+      ? ResultL2<T, K> extends never
+        ? ResultL3<T, K> extends never
+          ? ResultL4<T, K> extends never
+            ? unknown // Must be a group name
+            : ResultL4<T, K>
+          : ResultL3<T, K>
+        : ResultL2<T, K>
+      : ResultL1<T, K>
+    : ResultL0<T, K>;
+
+/**
  * Helper type to extract work results from parallel works array.
- * Since Work implements IWorkDefinition, we can use Extract directly.
+ * Supports up to 5 levels of nesting:
+ * - Level 0: Direct works in .parallel([...])
+ * - Level 1: Works inside groups
+ * - Level 2: Works inside groups inside groups
+ * - Level 3: Works inside groups inside groups inside groups
+ * - Level 4: Works inside groups inside groups inside groups inside groups
+ *
+ * All work names and their result types are fully inferred.
+ * Group names are inferred with unknown result type.
  */
 export type ParallelWorksToRecord<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  T extends readonly IWorkDefinition<string, any, any, any>[],
+  T extends readonly ParallelInput<string, any, any, any>[],
 > = {
-  [K in T[number]['name']]: Extract<
-    T[number],
-    { name: K }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  > extends IWorkDefinition<string, any, infer R, any>
-    ? R
-    : never;
+  [K in ExtractAllNames<T[number]>]: FindResultType<T[number], K>;
 };
