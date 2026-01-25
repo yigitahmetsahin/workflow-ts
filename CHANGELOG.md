@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [5.0.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v4.1.0...v5.0.0) (2026-01-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* onError is no longer called when silenceError is true. If you relied on onError being called for silenced errors, remove silenceError and handle continuation in onError by not throwing.
+
+### Features
+
+* let onError control workflow continuation ([e31fbbe](https://github.com/yigitahmetsahin/workflow-ts/commit/e31fbbe1968ce366c15bc2faf763e67c5c469432))
+
 ## [4.1.0](https://github.com/yigitahmetsahin/workflow-ts/compare/v4.0.0...v4.1.0) (2026-01-25)
 
 
