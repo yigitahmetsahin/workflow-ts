@@ -188,6 +188,7 @@ const myWork = new Work({
   execute: async (ctx) => value,
   shouldRun: (ctx) => true, // optional
   onError: (error, ctx) => {}, // optional
+  onSkipped: (ctx) => {}, // optional - called when shouldRun returns false
   silenceError: true, // optional - don't fail tree on error
 });
 
@@ -217,6 +218,7 @@ const conditionalTree = Work.tree('conditional', {
   shouldRun: (ctx) => ctx.data.isEnabled, // Skip entire tree
   silenceError: true, // Don't fail parent on error
   onError: (error, ctx) => {}, // Handle tree errors
+  onSkipped: (ctx) => {}, // Called when tree is skipped
 }).addSerial({ name: 'work', execute: async () => 'result' });
 
 // Seal tree to prevent modifications

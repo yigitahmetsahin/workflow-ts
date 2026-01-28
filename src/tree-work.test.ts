@@ -193,6 +193,78 @@ describe('TreeWork.run()', () => {
       expect(result.context.workResults.get('skipMe')?.status).toBe(WorkStatus.Skipped);
       expect(result.context.workResults.get('runMe')?.result).toBe('did run');
     });
+
+    it('should call onSkipped handler when serial work is skipped', async () => {
+      const onSkippedFn = vi.fn();
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'skippable',
+        shouldRun: () => false,
+        execute: async () => 'should not run',
+        onSkipped: onSkippedFn,
+      });
+
+      await tree.run({ userId: '123' });
+
+      expect(onSkippedFn).toHaveBeenCalledTimes(1);
+      expect(onSkippedFn.mock.calls[0][0]).toMatchObject({
+        data: { userId: '123' },
+      });
+    });
+
+    it('should call onSkipped handler when parallel work is skipped', async () => {
+      const onSkippedFn = vi.fn();
+
+      const tree = Work.tree('tree').addParallel([
+        {
+          name: 'skippable',
+          shouldRun: () => false,
+          execute: async () => 'should not run',
+          onSkipped: onSkippedFn,
+        },
+        {
+          name: 'runMe',
+          execute: async () => 'did run',
+        },
+      ]);
+
+      await tree.run({});
+
+      expect(onSkippedFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should support async onSkipped handler', async () => {
+      let skippedLogged = false;
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'asyncSkipped',
+        shouldRun: () => false,
+        execute: async () => 'should not run',
+        onSkipped: async () => {
+          await new Promise((r) => setTimeout(r, 10));
+          skippedLogged = true;
+        },
+      });
+
+      await tree.run({});
+
+      expect(skippedLogged).toBe(true);
+    });
+
+    it('should not call onSkipped when work runs', async () => {
+      const onSkippedFn = vi.fn();
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'willRun',
+        shouldRun: () => true,
+        execute: async () => 'executed',
+        onSkipped: onSkippedFn,
+      });
+
+      await tree.run({});
+
+      expect(onSkippedFn).not.toHaveBeenCalled();
+    });
   });
 
   describe('error handling', () => {
@@ -606,6 +678,45 @@ describe('TreeWork.run()', () => {
       expect(onErrorFn).toHaveBeenCalledTimes(1);
       expect(result.status).toBe(WorkStatus.Completed);
       expect(result.context.workResults.get('afterFail')?.result).toBe('continued');
+    });
+
+    it('should support onSkipped on tree', async () => {
+      const onSkippedFn = vi.fn();
+
+      const skippableTree = Work.tree('skippableTree', {
+        shouldRun: () => false,
+        onSkipped: onSkippedFn,
+      }).addSerial({
+        name: 'innerWork',
+        execute: async () => 'should not run',
+      });
+
+      const outerTree = Work.tree('outer').addSerial(skippableTree);
+
+      await outerTree.run({ userId: '456' });
+
+      expect(onSkippedFn).toHaveBeenCalledTimes(1);
+      expect(onSkippedFn.mock.calls[0][0]).toMatchObject({
+        data: { userId: '456' },
+      });
+    });
+
+    it('should not call tree onSkipped when tree runs', async () => {
+      const onSkippedFn = vi.fn();
+
+      const runningTree = Work.tree('runningTree', {
+        shouldRun: () => true,
+        onSkipped: onSkippedFn,
+      }).addSerial({
+        name: 'innerWork',
+        execute: async () => 'executed',
+      });
+
+      const outerTree = Work.tree('outer').addSerial(runningTree);
+
+      await outerTree.run({});
+
+      expect(onSkippedFn).not.toHaveBeenCalled();
     });
   });
 
