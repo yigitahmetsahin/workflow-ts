@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Work, getWorkDefinition } from './work';
+import { Work } from './work';
+import { getWorkDefinition } from './utils';
 import { WorkflowContext } from './work.types';
 
 describe('Work', () => {

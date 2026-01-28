@@ -1,9 +1,19 @@
 /**
  * Error handling example with Work.tree()
+ *
+ * Demonstrates:
+ * - Using onError callbacks
+ * - Error propagation vs swallowing
+ * - WorkTreeError base class for catching all library errors
  */
-import { Work, WorkStatus } from '../src';
+import { Work, WorkStatus, WorkTreeError, TimeoutError } from '../src';
 
 async function main() {
+  // ==========================================================================
+  // Example 1: Basic error handling with onError
+  // ==========================================================================
+  console.log('=== Example 1: Basic error handling ===\n');
+
   const tree = Work.tree('paymentProcessing')
     .addSerial({
       name: 'validateCard',
@@ -69,6 +79,40 @@ async function main() {
     console.log('\n✅ Payment successful!');
   } else {
     console.log('\n❌ Tree failed:', result.error?.message);
+  }
+
+  // ==========================================================================
+  // Example 2: Using WorkTreeError base class
+  // ==========================================================================
+  console.log('\n=== Example 3: WorkTreeError base class ===\n');
+
+  const timeoutTree = Work.tree('withTimeout').addSerial({
+    name: 'slowOperation',
+    execute: async () => {
+      await new Promise((r) => setTimeout(r, 200));
+      return 'done';
+    },
+    timeout: 50, // Will timeout
+  });
+
+  const timeoutResult = await timeoutTree.run({});
+
+  if (timeoutResult.status === WorkStatus.Failed && timeoutResult.error) {
+    const error = timeoutResult.error;
+
+    // Check for specific error type
+    if (error instanceof TimeoutError) {
+      console.log('⏱️ Timeout error detected!');
+      console.log(`   Work: ${error.workName}`);
+      console.log(`   Timeout: ${error.timeoutMs}ms`);
+    }
+
+    // Or catch any work-tree error
+    if (error instanceof WorkTreeError) {
+      console.log('\n📦 This is a WorkTreeError (base class)');
+      console.log(`   Name: ${error.name}`);
+      console.log(`   Message: ${error.message}`);
+    }
   }
 }
 

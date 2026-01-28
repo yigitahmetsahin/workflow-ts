@@ -579,6 +579,26 @@ if (result.status === WorkStatus.Failed && result.error instanceof TimeoutError)
 }
 ```
 
+### WorkTreeError Base Class
+
+All work-tree errors extend `WorkTreeError`, allowing you to catch any library error:
+
+```typescript
+import { Work, WorkTreeError, TimeoutError } from '@yigitahmetsahin/work-tree';
+
+try {
+  const result = await tree.run(data);
+} catch (error) {
+  if (error instanceof TimeoutError) {
+    // Handle timeout specifically
+    console.log('Timeout:', error.workName, error.timeoutMs);
+  } else if (error instanceof WorkTreeError) {
+    // Handle any work-tree error
+    console.log('Work-tree error:', error.message);
+  }
+}
+```
+
 ### Timeout with Error Handling
 
 ```typescript

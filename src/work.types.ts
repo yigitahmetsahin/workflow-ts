@@ -1,4 +1,21 @@
 /**
+ * =============================================================================
+ * IMPORTANT: All types MUST be defined in this file (work.types.ts)
+ * =============================================================================
+ *
+ * This file is the single source of truth for all type definitions in the
+ * work-tree library. Do NOT define types directly in work.ts or other files.
+ *
+ * Guidelines:
+ * - Use `interface` for contracts implemented by classes (IWorkDefinition, etc.)
+ * - Use `type` for data structures and type aliases (WorkResult, TreeResult, etc.)
+ * - Use `enum` for status values (WorkStatus)
+ *
+ * Internal helper types (MaybeRecord, UnionToIntersection, etc.) also belong here.
+ * =============================================================================
+ */
+
+/**
  * Work Status
  */
 export enum WorkStatus {
@@ -279,3 +296,81 @@ export type SealedTreeWork<
 > = IRunnableTreeWork<TData, TWorkResults> & {
   readonly [SEALED_BRAND]: true;
 };
+
+// ============================================================================
+// Internal Helper Types
+// ============================================================================
+
+/**
+ * Helper type that only creates a record if the key is a literal string.
+ * If K is the wide 'string' type, returns empty object to avoid index signatures.
+ * This prevents { [x: string]: unknown } from polluting accumulated types.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export type MaybeRecord<K extends string, V> = string extends K ? {} : { [P in K]: V };
+
+/**
+ * Normalized retry options with all defaults filled in (internal use)
+ */
+export type NormalizedRetryOptions = {
+  maxRetries: number;
+  delay: number;
+  backoff: 'fixed' | 'exponential';
+  backoffMultiplier: number;
+  maxDelay: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  shouldRetry?: RetryOptions<any, any>['shouldRetry'];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onRetry?: RetryOptions<any, any>['onRetry'];
+};
+
+/**
+ * Normalized timeout options with all defaults filled in (internal use)
+ */
+export type NormalizedTimeoutOptions = {
+  ms: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onTimeout?: TimeoutOptions<any, any>['onTimeout'];
+};
+
+/**
+ * Input type for parallel works - accepts works with any available results.
+ * This is more permissive than WorkInput to allow nested trees with their own accumulated types.
+ */
+export type ParallelWorkInput<TData> =
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  | IWorkDefinition<string, TData, unknown, any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  | ITreeWorkDefinition<string, TData, any>;
+
+/**
+ * Helper type to convert union to intersection
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
+  k: infer I
+) => void
+  ? I
+  : never;
+
+/**
+ * Helper type to extract the result type from a work (name -> result mapping).
+ * Uses MaybeRecord to avoid index signatures when tree names are generic 'string'.
+ */
+export type ExtractWorkResult<TWork> =
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  TWork extends IWorkDefinition<infer N, any, infer R, any>
+    ? { [K in N]: R }
+    : // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      TWork extends ITreeWorkDefinition<infer N, any, any>
+      ? MaybeRecord<N, unknown>
+      : // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+        {};
+
+/**
+ * Helper type to extract accumulated inner works from a TreeWork.
+ * This allows nested tree's inner works to be accessible in outer tree.
+ * Note: This type uses TreeWork from work.ts, so it must be defined there
+ * to avoid circular imports. Re-exported here for convenience.
+ */
+// TreeWork-specific type defined in work.ts due to circular dependency

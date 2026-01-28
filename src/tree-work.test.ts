@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Work, TimeoutError } from './work';
+import { Work } from './work';
+import { TimeoutError, WorkTreeError } from './errors';
 import { WorkStatus } from './work.types';
 
 describe('TreeWork.run()', () => {
@@ -1879,6 +1880,24 @@ describe('TreeWork.run()', () => {
       expect(timeoutError.name).toBe('TimeoutError');
       expect(timeoutError.workName).toBe('testTimeout');
       expect(timeoutError.timeoutMs).toBe(30);
+    });
+
+    it('should verify TimeoutError extends WorkTreeError', async () => {
+      const tree = Work.tree('tree').addSerial({
+        name: 'testTimeout',
+        execute: async () => {
+          await new Promise((r) => setTimeout(r, 100));
+          return 'should not return';
+        },
+        timeout: 30,
+      });
+
+      const result = await tree.run({});
+
+      // TimeoutError should be catchable as WorkTreeError
+      expect(result.error).toBeInstanceOf(TimeoutError);
+      expect(result.error).toBeInstanceOf(WorkTreeError);
+      expect(result.error).toBeInstanceOf(Error);
     });
 
     it('should handle async onTimeout callback', async () => {
