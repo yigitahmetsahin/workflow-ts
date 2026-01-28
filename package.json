@@ -1,6 +1,6 @@
 {
   "name": "@yigitahmetsahin/work-tree",
-  "version": "6.3.0",
+  "version": "6.4.0",
   "description": "A simple, extensible TypeScript workflow engine supporting serial and parallel work execution with full type inference",
   "main": "dist/index.js",
   "module": "dist/index.mjs",

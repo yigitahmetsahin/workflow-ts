@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [6.4.0](https://github.com/yigitahmetsahin/work-tree/compare/v6.3.0...v6.4.0) (2026-01-28)
+
+
+### Features
+
+* add timeout support for works and trees ([2b5319c](https://github.com/yigitahmetsahin/work-tree/commit/2b5319cbe77ad8acd9026e955d6b9674dc1a4591))
+
 ## [6.3.0](https://github.com/yigitahmetsahin/work-tree/compare/v6.2.0...v6.3.0) (2026-01-28)
 
 
