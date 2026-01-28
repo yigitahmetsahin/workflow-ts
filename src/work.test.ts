@@ -204,6 +204,79 @@ describe('Work', () => {
     });
   });
 
+  describe('onSkipped', () => {
+    it('should assign onSkipped from definition', () => {
+      const onSkippedFn = vi.fn();
+
+      const work = new Work({
+        name: 'skippableWork',
+        execute: async () => 'result',
+        shouldRun: () => false,
+        onSkipped: onSkippedFn,
+      });
+
+      expect(work.onSkipped).toBe(onSkippedFn);
+    });
+
+    it('should call onSkipped with context when provided', () => {
+      const onSkippedFn = vi.fn();
+
+      const work = new Work({
+        name: 'skippableWork',
+        execute: async () => 'result',
+        onSkipped: onSkippedFn,
+      });
+
+      const mockContext = {
+        data: { id: 123 },
+        workResults: {
+          get: vi.fn(),
+          set: vi.fn(),
+          has: vi.fn(),
+        },
+      } as WorkflowContext<{ id: number }, Record<string, unknown>>;
+
+      work.onSkipped!(mockContext);
+
+      expect(onSkippedFn).toHaveBeenCalledWith(mockContext);
+    });
+
+    it('should support async onSkipped', async () => {
+      let skippedLogged = false;
+
+      const work = new Work({
+        name: 'asyncSkippedHandler',
+        execute: async () => 'result',
+        onSkipped: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          skippedLogged = true;
+        },
+      });
+
+      const mockContext = {
+        data: {},
+        workResults: {
+          get: vi.fn(),
+          set: vi.fn(),
+          has: vi.fn(),
+        },
+      } as WorkflowContext<Record<string, unknown>, Record<string, unknown>>;
+
+      await work.onSkipped!(mockContext);
+
+      expect(skippedLogged).toBe(true);
+    });
+
+    it('should leave onSkipped undefined when not provided', () => {
+      const work = new Work({
+        name: 'minimalWork',
+        execute: async () => 'result',
+      });
+
+      expect(work.onSkipped).toBeUndefined();
+    });
+  });
+
   describe('implements IWorkDefinition', () => {
     it('should be usable where IWorkDefinition is expected', () => {
       const work = new Work({

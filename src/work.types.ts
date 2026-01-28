@@ -64,7 +64,7 @@ export type TreeResult<
 // ============================================================================
 
 /**
- * Common behavior options for works and trees (shouldRun, onError, silenceError)
+ * Common behavior options for works and trees (shouldRun, onError, onSkipped, silenceError)
  */
 export type WorkBehaviorOptions<
   TData = Record<string, unknown>,
@@ -79,6 +79,8 @@ export type WorkBehaviorOptions<
     error: Error,
     context: WorkflowContext<TData, TAvailableWorkResults>
   ) => void | Promise<void>;
+  /** Optional: called when work is skipped (shouldRun returns false) */
+  onSkipped?: (context: WorkflowContext<TData, TAvailableWorkResults>) => void | Promise<void>;
   /** Optional: if true, errors won't stop the workflow */
   silenceError?: boolean;
 };

@@ -1,5 +1,6 @@
 /**
  * Conditional example - Skip steps based on conditions with Work.tree()
+ * Demonstrates shouldRun and onSkipped hooks
  */
 import { Work } from '../src';
 
@@ -25,6 +26,9 @@ async function main() {
         await new Promise((r) => setTimeout(r, 100));
         return { type: 'email', sent: true };
       },
+      onSkipped: (ctx) => {
+        console.log(`⏭️ Email notification skipped for user: ${ctx.data.userId}`);
+      },
     })
     .addSerial({
       name: 'sendSmsNotification',
@@ -35,6 +39,9 @@ async function main() {
         await new Promise((r) => setTimeout(r, 100));
         return { type: 'sms', sent: true };
       },
+      onSkipped: (ctx) => {
+        console.log(`⏭️ SMS notification skipped for user: ${ctx.data.userId}`);
+      },
     })
     .addSerial({
       name: 'sendPushNotification',
@@ -44,6 +51,9 @@ async function main() {
         console.log(`🔔 Sending push to device: ${prefs?.deviceToken}`);
         await new Promise((r) => setTimeout(r, 100));
         return { type: 'push', sent: true };
+      },
+      onSkipped: (ctx) => {
+        console.log(`⏭️ Push notification skipped for user: ${ctx.data.userId}`);
       },
     })
     .addSerial({

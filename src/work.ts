@@ -78,6 +78,11 @@ export class Work<
     context: WorkflowContext<TData, TAvailableWorkResults>
   ) => void | Promise<void>;
 
+  /** Optional: called when work is skipped (shouldRun returns false) */
+  readonly onSkipped?: (
+    context: WorkflowContext<TData, TAvailableWorkResults>
+  ) => void | Promise<void>;
+
   /** Optional: if true, errors won't stop the workflow (result will be undefined) */
   readonly silenceError?: boolean;
 
@@ -86,6 +91,7 @@ export class Work<
     this.execute = definition.execute;
     this.shouldRun = definition.shouldRun;
     this.onError = definition.onError;
+    this.onSkipped = definition.onSkipped;
     this.silenceError = definition.silenceError;
   }
 
@@ -185,6 +191,9 @@ export class TreeWork<
   /** Optional: called when tree work fails */
   readonly onError?: (error: Error, context: WorkflowContext<TData, TBase>) => void | Promise<void>;
 
+  /** Optional: called when tree work is skipped (shouldRun returns false) */
+  readonly onSkipped?: (context: WorkflowContext<TData, TBase>) => void | Promise<void>;
+
   /** Optional: if true, errors won't stop the workflow */
   readonly silenceError?: boolean;
 
@@ -192,6 +201,7 @@ export class TreeWork<
     this.name = options.name;
     this.shouldRun = options.shouldRun;
     this.onError = options.onError;
+    this.onSkipped = options.onSkipped;
     this.silenceError = options.silenceError;
     this._options = {
       failFast: options.failFast ?? true,
@@ -478,6 +488,10 @@ export class TreeWork<
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         context.workResults.set(tree.name as any, skippedResult as any);
         workResults.set(tree.name, skippedResult);
+        // Call onSkipped handler if provided
+        if (tree.onSkipped) {
+          await tree.onSkipped(context);
+        }
         return { name: tree.name, skipped: true };
       }
     }
@@ -618,6 +632,10 @@ export class TreeWork<
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           context.workResults.set(workDef.name as any, skippedResult as any);
           workResults.set(workDef.name, skippedResult);
+          // Call onSkipped handler if provided
+          if (workDef.onSkipped) {
+            await workDef.onSkipped(context);
+          }
           return { name: workDef.name, skipped: true };
         }
       }
@@ -710,6 +728,10 @@ export class TreeWork<
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         context.workResults.set(work.name as any, skippedResult as any);
         workResults.set(work.name, skippedResult);
+        // Call onSkipped handler if provided
+        if (work.onSkipped) {
+          await work.onSkipped(context);
+        }
         return;
       }
     }

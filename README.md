@@ -90,6 +90,7 @@ const tree = Work.tree('myTree', {
   failFast: true, // optional: stop on first error (default: true)
   shouldRun: (ctx) => true, // optional: skip entire tree
   onError: (error, ctx) => {}, // optional: handle tree-level errors
+  onSkipped: (ctx) => {}, // optional: called when tree is skipped
   silenceError: false, // optional: continue on error
 });
 
@@ -196,6 +197,7 @@ Each work can have the following properties:
   execute: async (ctx) => {}, // Required: async function
   shouldRun: (ctx) => true,   // Optional: skip condition
   onError: (err, ctx) => {},  // Optional: error handler
+  onSkipped: (ctx) => {},     // Optional: called when skipped
   silenceError: false,        // Optional: continue on error
 }
 ```
@@ -266,6 +268,22 @@ const tree = Work.tree('notifications')
 
 // Only sendEmail executes
 await tree.run({ sendEmail: true, sendSms: false });
+```
+
+### `onSkipped` Callback
+
+Handle skipped works (when `shouldRun` returns false):
+
+```typescript
+tree.addSerial({
+  name: 'optionalStep',
+  shouldRun: (ctx) => ctx.data.enabled,
+  execute: async () => 'result',
+  onSkipped: async (ctx) => {
+    console.log('Step was skipped for user:', ctx.data.userId);
+    // Useful for logging, cleanup, or triggering alternative actions
+  },
+});
 ```
 
 ## Error Handling
