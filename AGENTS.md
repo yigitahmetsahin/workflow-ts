@@ -190,6 +190,22 @@ const myWork = new Work({
   onError: (error, ctx) => {}, // optional
   onSkipped: (ctx) => {}, // optional - called when shouldRun returns false
   silenceError: true, // optional - don't fail tree on error
+  retry: 3, // optional - retry up to 3 times on failure
+});
+
+// Retry with full configuration
+const retryWork = new Work({
+  name: 'retryWork',
+  execute: async (ctx) => fetchData(),
+  retry: {
+    maxRetries: 5,
+    delay: 1000, // 1 second initial delay
+    backoff: 'exponential', // 'fixed' | 'exponential'
+    backoffMultiplier: 2, // delay grows: 1s, 2s, 4s...
+    maxDelay: 30000, // cap at 30 seconds
+    shouldRetry: (error, attempt, ctx) => !error.message.includes('401'),
+    onRetry: (error, attempt, ctx) => console.log(`Retry ${attempt}...`),
+  },
 });
 
 // Use Work instances in trees
@@ -244,6 +260,7 @@ console.log(step1Result.status); // WorkStatus.Completed | WorkStatus.Failed | W
 console.log(step1Result.result); // the actual return value
 console.log(step1Result.duration); // execution time in ms
 console.log(step1Result.parent); // parent tree name (if nested), or undefined
+console.log(step1Result.attempts); // total attempts (1 = no retries, 2+ = retried)
 
 // Check tree status
 if (result.status === WorkStatus.Completed) {

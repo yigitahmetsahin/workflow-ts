@@ -57,6 +57,43 @@ describe('Work', () => {
 
       expect(work.silenceError).toBe(false);
     });
+
+    it('should assign retry as number from definition', () => {
+      const work = new Work({
+        name: 'retryNumber',
+        execute: async () => 'result',
+        retry: 3,
+      });
+
+      expect(work.retry).toBe(3);
+    });
+
+    it('should assign retry as object from definition', () => {
+      const retryOptions = {
+        maxRetries: 5,
+        delay: 1000,
+        backoff: 'exponential' as const,
+        backoffMultiplier: 2,
+        maxDelay: 30000,
+      };
+
+      const work = new Work({
+        name: 'retryObject',
+        execute: async () => 'result',
+        retry: retryOptions,
+      });
+
+      expect(work.retry).toEqual(retryOptions);
+    });
+
+    it('should leave retry undefined when not provided', () => {
+      const work = new Work({
+        name: 'noRetry',
+        execute: async () => 'result',
+      });
+
+      expect(work.retry).toBeUndefined();
+    });
   });
 
   describe('execute', () => {

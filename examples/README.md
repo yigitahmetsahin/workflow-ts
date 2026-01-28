@@ -12,6 +12,7 @@ npx tsx examples/basic.ts
 npx tsx examples/parallel.ts
 npx tsx examples/conditional.ts
 npx tsx examples/error-handling.ts
+npx tsx examples/retry.ts
 npx tsx examples/work-class.ts
 npx tsx examples/tree-work.ts
 npx tsx examples/sealed.ts
@@ -115,7 +116,19 @@ Error handling demonstrating:
 - Accessing error details via `WorkResult.error`
 - Error recovery patterns
 
-### 5. Work Class (`work-class.ts`)
+### 5. Retry (`retry.ts`)
+
+Retry mechanisms demonstrating:
+
+- Simple retry count (`retry: 3`)
+- Retry with fixed delay
+- Exponential backoff with `backoff: 'exponential'`
+- `shouldRetry` callback for conditional retry (e.g., only retry network errors)
+- `onRetry` hook for logging/metrics before each retry
+- Combining retry with `silenceError` for non-critical work
+- Tracking attempts via `WorkResult.attempts`
+
+### 6. Work Class (`work-class.ts`)
 
 Standalone work definitions demonstrating:
 
@@ -125,7 +138,7 @@ Standalone work definitions demonstrating:
 - Reusing the same Work across multiple trees
 - Conditional execution with Work class
 
-### 6. Tree Work (`tree-work.ts`)
+### 7. Tree Work (`tree-work.ts`)
 
 Nested tree-like structures demonstrating:
 
@@ -136,7 +149,7 @@ Nested tree-like structures demonstrating:
 - Parent tracking for nested works
 - Tree-level `shouldRun`, `onError`, and `silenceError`
 
-### 7. Sealed (`sealed.ts`)
+### 8. Sealed (`sealed.ts`)
 
 Sealing trees to prevent modifications:
 

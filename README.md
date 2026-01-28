@@ -17,6 +17,7 @@ A simple, extensible TypeScript workflow engine supporting serial and parallel w
 - 🧩 **Composable Trees** - Nest trees inside trees for complex workflows
 - ⏭️ **Conditional Execution** - Skip work items based on runtime conditions
 - 🛡️ **Error Handling** - Built-in error callbacks and silenceError option
+- 🔄 **Retry Mechanism** - Configurable retries with exponential backoff
 - 📊 **Execution Tracking** - Duration tracking for individual works and total workflow
 - 🪶 **Zero Dependencies** - Lightweight with no external runtime dependencies
 
@@ -199,6 +200,7 @@ Each work can have the following properties:
   onError: (err, ctx) => {},  // Optional: error handler
   onSkipped: (ctx) => {},     // Optional: called when skipped
   silenceError: false,        // Optional: continue on error
+  retry: 3,                   // Optional: retry configuration
 }
 ```
 
@@ -373,6 +375,128 @@ switch (workResult.status) {
 }
 ```
 
+## Retry Mechanism
+
+Works can be configured to retry on failure with various strategies.
+
+### Simple Retry Count
+
+```typescript
+tree.addSerial({
+  name: 'unreliableApi',
+  execute: async () => {
+    const response = await fetch('/api/data');
+    return response.json();
+  },
+  retry: 3, // Retry up to 3 times (4 total attempts)
+});
+```
+
+### Full Retry Configuration
+
+```typescript
+tree.addSerial({
+  name: 'apiCall',
+  execute: async () => {
+    const response = await fetch('/api/data');
+    if (!response.ok) throw new Error('API error');
+    return response.json();
+  },
+  retry: {
+    maxRetries: 5, // Maximum retry attempts
+    delay: 1000, // Initial delay between retries (ms)
+    backoff: 'exponential', // 'fixed' or 'exponential'
+    backoffMultiplier: 2, // For exponential: delay * multiplier^attempt
+    maxDelay: 30000, // Cap delay at 30 seconds
+    shouldRetry: (error, attempt, ctx) => {
+      // Only retry on network errors, not auth errors
+      return !error.message.includes('401');
+    },
+    onRetry: async (error, attempt, ctx) => {
+      console.log(`Retry ${attempt + 1} after: ${error.message}`);
+      // Useful for logging, metrics, or cleanup before retry
+    },
+  },
+});
+```
+
+### Retry with Exponential Backoff
+
+```typescript
+tree.addSerial({
+  name: 'rateLimitedApi',
+  execute: async () => fetch('/api/rate-limited'),
+  retry: {
+    maxRetries: 4,
+    delay: 100, // Start with 100ms
+    backoff: 'exponential',
+    backoffMultiplier: 2,
+    // Delays: 100ms, 200ms, 400ms, 800ms
+  },
+});
+```
+
+### Conditional Retry with `shouldRetry`
+
+```typescript
+tree.addSerial({
+  name: 'conditionalRetry',
+  execute: async () => {
+    // ... operation that might fail
+  },
+  retry: {
+    maxRetries: 3,
+    shouldRetry: (error, attempt, ctx) => {
+      // Don't retry on validation errors
+      if (error.message.includes('validation')) return false;
+      // Don't retry on auth errors
+      if (error.message.includes('401')) return false;
+      // Retry everything else
+      return true;
+    },
+  },
+});
+```
+
+### Tracking Retry Attempts
+
+The number of attempts is tracked in `WorkResult.attempts`:
+
+```typescript
+const result = await tree.run({});
+const workResult = result.context.workResults.get('apiCall');
+
+console.log(workResult.attempts); // 1 = first try succeeded, 2+ = retried
+console.log(workResult.status); // Completed or Failed
+```
+
+### Combining Retry with Error Handling
+
+Retry works seamlessly with `silenceError` and `onError`:
+
+```typescript
+tree.addSerial({
+  name: 'nonCriticalWork',
+  execute: async () => {
+    throw new Error('Always fails');
+  },
+  retry: 2, // Try up to 3 times total
+  silenceError: true, // Don't fail the tree if all retries fail
+});
+
+tree.addSerial({
+  name: 'withOnError',
+  execute: async () => {
+    throw new Error('Fails');
+  },
+  retry: 2,
+  onError: async (error, ctx) => {
+    // Called only after all retries are exhausted
+    console.log('All retries failed:', error.message);
+  },
+});
+```
+
 ## WorkResult Structure
 
 ```typescript
@@ -382,6 +506,7 @@ type WorkResult<T> = {
   error?: Error; // The error (if failed)
   duration: number; // Execution time in ms
   parent?: string; // Parent tree name (if nested)
+  attempts?: number; // Total attempts (1 = no retries, 2+ = retried)
 };
 ```
 
@@ -434,6 +559,7 @@ See the `examples/` folder for complete examples:
 - `parallel.ts` - Concurrent execution
 - `conditional.ts` - Skip steps with shouldRun
 - `error-handling.ts` - Error handling patterns
+- `retry.ts` - Retry mechanisms with backoff
 - `work-class.ts` - Reusable Work instances
 - `tree-work.ts` - Nested tree structures
 - `sealed.ts` - Sealing trees to prevent modifications

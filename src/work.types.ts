@@ -17,6 +17,8 @@ export type WorkResult<TResult = unknown> = {
   duration: number;
   /** Parent work name, if this work is nested inside a tree work */
   parent?: string;
+  /** Total number of attempts (1 = no retries, 2+ = retried) */
+  attempts?: number;
 };
 
 /**
@@ -64,7 +66,46 @@ export type TreeResult<
 // ============================================================================
 
 /**
- * Common behavior options for works and trees (shouldRun, onError, onSkipped, silenceError)
+ * Full retry configuration options
+ */
+export type RetryOptions<
+  TData = Record<string, unknown>,
+  TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  /** Maximum number of retry attempts (not including the initial attempt) */
+  maxRetries: number;
+  /** Delay between retries in milliseconds (default: 0) */
+  delay?: number;
+  /** Backoff strategy: 'fixed' keeps delay constant, 'exponential' multiplies delay each retry (default: 'fixed') */
+  backoff?: 'fixed' | 'exponential';
+  /** Multiplier for exponential backoff (default: 2) */
+  backoffMultiplier?: number;
+  /** Maximum delay cap in milliseconds for exponential backoff (default: Infinity) */
+  maxDelay?: number;
+  /** Optional: determine if a retry should be attempted based on the error */
+  shouldRetry?: (
+    error: Error,
+    attempt: number,
+    context: WorkflowContext<TData, TAvailableWorkResults>
+  ) => boolean | Promise<boolean>;
+  /** Optional: called before each retry attempt */
+  onRetry?: (
+    error: Error,
+    attempt: number,
+    context: WorkflowContext<TData, TAvailableWorkResults>
+  ) => void | Promise<void>;
+};
+
+/**
+ * Retry configuration - either a simple retry count or full options
+ */
+export type RetryConfig<
+  TData = Record<string, unknown>,
+  TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> = number | RetryOptions<TData, TAvailableWorkResults>;
+
+/**
+ * Common behavior options for works and trees (shouldRun, onError, onSkipped, silenceError, retry)
  */
 export type WorkBehaviorOptions<
   TData = Record<string, unknown>,
@@ -83,6 +124,8 @@ export type WorkBehaviorOptions<
   onSkipped?: (context: WorkflowContext<TData, TAvailableWorkResults>) => void | Promise<void>;
   /** Optional: if true, errors won't stop the workflow */
   silenceError?: boolean;
+  /** Optional: retry configuration - number of retries or full options */
+  retry?: RetryConfig<TData, TAvailableWorkResults>;
 };
 
 /**

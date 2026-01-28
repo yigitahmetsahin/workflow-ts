@@ -578,9 +578,19 @@ describe('TreeWork.run()', () => {
       expect(result.context.workResults.get('step4')?.result).toBe('deepest');
       expect(result.context.workResults.get('final')?.result).toBe('Got: deepest');
       expect(result.workResults.get('step4')?.parent).toBe('lv4');
-      expect(result.workResults.get('lv4')?.parent).toBe('lv3');
-      expect(result.workResults.get('lv3')?.parent).toBe('lv2');
-      expect(result.workResults.get('lv2')?.parent).toBe('lv1');
+      // Tree names are tracked at runtime but not fully typed - cast for test assertions
+      expect((result.workResults as Map<string, unknown>).get('lv4')).toHaveProperty(
+        'parent',
+        'lv3'
+      );
+      expect((result.workResults as Map<string, unknown>).get('lv3')).toHaveProperty(
+        'parent',
+        'lv2'
+      );
+      expect((result.workResults as Map<string, unknown>).get('lv2')).toHaveProperty(
+        'parent',
+        'lv1'
+      );
     });
 
     it('should execute nested trees in parallel', async () => {
@@ -626,7 +636,11 @@ describe('TreeWork.run()', () => {
       const result = await outerTree.run({ runTree: false });
 
       expect(result.status).toBe(WorkStatus.Completed);
-      expect(result.workResults.get('skippableTree')?.status).toBe(WorkStatus.Skipped);
+      // Tree names are tracked at runtime - cast for test assertion
+      expect((result.workResults as Map<string, unknown>).get('skippableTree')).toHaveProperty(
+        'status',
+        WorkStatus.Skipped
+      );
       expect(result.workResults.has('innerWork')).toBe(false);
     });
 
@@ -650,7 +664,11 @@ describe('TreeWork.run()', () => {
       const result = await outerTree.run({});
 
       expect(result.status).toBe(WorkStatus.Completed);
-      expect(result.workResults.get('failingTree')?.status).toBe(WorkStatus.Failed);
+      // Tree names are tracked at runtime - cast for test assertion
+      expect((result.workResults as Map<string, unknown>).get('failingTree')).toHaveProperty(
+        'status',
+        WorkStatus.Failed
+      );
       expect(result.context.workResults.get('afterFail')?.result).toBe('continued');
     });
 
@@ -1018,7 +1036,10 @@ describe('TreeWork.run()', () => {
       const result = await tree.run({});
 
       expect(result.status).toBe(WorkStatus.Completed);
-      expect(result.context.workResults.get('skippedTree')?.status).toBe(WorkStatus.Skipped);
+      // Tree names are tracked at runtime - cast for test assertion
+      expect(
+        (result.context.workResults as Map<string, unknown>).get('skippedTree')
+      ).toHaveProperty('status', WorkStatus.Skipped);
       expect(result.context.workResults.get('success')?.result).toBe('ok');
     });
 
@@ -1048,7 +1069,10 @@ describe('TreeWork.run()', () => {
       const result = await tree.run({});
 
       expect(result.status).toBe(WorkStatus.Completed);
-      expect(result.context.workResults.get('silencedTree')?.status).toBe(WorkStatus.Failed);
+      // Tree names are tracked at runtime - cast for test assertion
+      expect(
+        (result.context.workResults as Map<string, unknown>).get('silencedTree')
+      ).toHaveProperty('status', WorkStatus.Failed);
       expect(result.context.workResults.get('afterParallel')?.result).toBe('continued');
     });
 
@@ -1108,6 +1132,431 @@ describe('TreeWork.run()', () => {
 
       expect(result.status).toBe(WorkStatus.Failed);
       expect(result.error?.message).toBe('Re-thrown');
+    });
+  });
+
+  describe('retry behavior', () => {
+    it('should retry work specified number of times with simple retry count', async () => {
+      let attempts = 0;
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'retryWork',
+        execute: async () => {
+          attempts++;
+          if (attempts < 3) {
+            throw new Error(`Attempt ${attempts} failed`);
+          }
+          return 'success';
+        },
+        retry: 3,
+      });
+
+      const result = await tree.run({});
+
+      expect(result.status).toBe(WorkStatus.Completed);
+      expect(result.context.workResults.get('retryWork')?.result).toBe('success');
+      expect(result.context.workResults.get('retryWork')?.attempts).toBe(3);
+      expect(attempts).toBe(3);
+    });
+
+    it('should fail after exhausting all retry attempts', async () => {
+      let attempts = 0;
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'alwaysFails',
+        execute: async () => {
+          attempts++;
+          throw new Error(`Attempt ${attempts} failed`);
+        },
+        retry: 2,
+      });
+
+      const result = await tree.run({});
+
+      expect(result.status).toBe(WorkStatus.Failed);
+      expect(result.error?.message).toBe('Attempt 3 failed');
+      expect(result.context.workResults.get('alwaysFails')?.attempts).toBe(3);
+      expect(attempts).toBe(3); // 1 initial + 2 retries
+    });
+
+    it('should track attempts as 1 when no retry is configured', async () => {
+      const tree = Work.tree('tree').addSerial({
+        name: 'noRetry',
+        execute: async () => 'done',
+      });
+
+      const result = await tree.run({});
+
+      expect(result.context.workResults.get('noRetry')?.attempts).toBe(1);
+    });
+
+    it('should track attempts as 1 when work succeeds on first try with retry configured', async () => {
+      const tree = Work.tree('tree').addSerial({
+        name: 'firstTrySuccess',
+        execute: async () => 'immediate success',
+        retry: 5,
+      });
+
+      const result = await tree.run({});
+
+      expect(result.context.workResults.get('firstTrySuccess')?.result).toBe('immediate success');
+      expect(result.context.workResults.get('firstTrySuccess')?.attempts).toBe(1);
+    });
+
+    it('should call onRetry hook before each retry attempt', async () => {
+      let attempts = 0;
+      const onRetryFn = vi.fn();
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'retryWithHook',
+        execute: async () => {
+          attempts++;
+          if (attempts < 3) {
+            throw new Error(`Attempt ${attempts} failed`);
+          }
+          return 'success';
+        },
+        retry: {
+          maxRetries: 3,
+          onRetry: onRetryFn,
+        },
+      });
+
+      await tree.run({});
+
+      expect(onRetryFn).toHaveBeenCalledTimes(2); // Called before retry 2 and 3
+      expect(onRetryFn.mock.calls[0][0]).toBeInstanceOf(Error);
+      expect(onRetryFn.mock.calls[0][0].message).toBe('Attempt 1 failed');
+      expect(onRetryFn.mock.calls[0][1]).toBe(1); // First attempt that failed
+      expect(onRetryFn.mock.calls[1][0].message).toBe('Attempt 2 failed');
+      expect(onRetryFn.mock.calls[1][1]).toBe(2);
+    });
+
+    it('should respect shouldRetry callback to stop retrying', async () => {
+      let attempts = 0;
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'conditionalRetry',
+        execute: async () => {
+          attempts++;
+          throw new Error(attempts === 2 ? 'fatal error' : 'transient error');
+        },
+        retry: {
+          maxRetries: 5,
+          shouldRetry: (error) => !error.message.includes('fatal'),
+        },
+      });
+
+      const result = await tree.run({});
+
+      expect(result.status).toBe(WorkStatus.Failed);
+      expect(result.error?.message).toBe('fatal error');
+      expect(attempts).toBe(2); // Stopped at attempt 2 due to fatal error
+      expect(result.context.workResults.get('conditionalRetry')?.attempts).toBe(2);
+    });
+
+    it('should wait with fixed delay between retries', async () => {
+      let attempts = 0;
+      const startTime = Date.now();
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'delayedRetry',
+        execute: async () => {
+          attempts++;
+          if (attempts < 3) {
+            throw new Error('retry');
+          }
+          return 'done';
+        },
+        retry: {
+          maxRetries: 2,
+          delay: 50,
+          backoff: 'fixed',
+        },
+      });
+
+      await tree.run({});
+      const duration = Date.now() - startTime;
+
+      expect(attempts).toBe(3);
+      // Should have waited ~100ms total (2 retries * 50ms each)
+      expect(duration).toBeGreaterThanOrEqual(95);
+    });
+
+    it('should use exponential backoff for delays', async () => {
+      let attempts = 0;
+      const delays: number[] = [];
+      let lastTime = Date.now();
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'exponentialRetry',
+        execute: async () => {
+          const now = Date.now();
+          if (attempts > 0) {
+            delays.push(now - lastTime);
+          }
+          lastTime = now;
+          attempts++;
+          if (attempts < 4) {
+            throw new Error('retry');
+          }
+          return 'done';
+        },
+        retry: {
+          maxRetries: 3,
+          delay: 20,
+          backoff: 'exponential',
+          backoffMultiplier: 2,
+        },
+      });
+
+      await tree.run({});
+
+      expect(attempts).toBe(4);
+      // Delays should be approximately: 20ms, 40ms, 80ms
+      expect(delays[0]).toBeGreaterThanOrEqual(18);
+      expect(delays[0]).toBeLessThan(50);
+      expect(delays[1]).toBeGreaterThanOrEqual(38);
+      expect(delays[1]).toBeLessThan(70);
+      expect(delays[2]).toBeGreaterThanOrEqual(78);
+    });
+
+    it('should cap delay at maxDelay for exponential backoff', async () => {
+      let attempts = 0;
+      const delays: number[] = [];
+      let lastTime = Date.now();
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'cappedRetry',
+        execute: async () => {
+          const now = Date.now();
+          if (attempts > 0) {
+            delays.push(now - lastTime);
+          }
+          lastTime = now;
+          attempts++;
+          if (attempts < 4) {
+            throw new Error('retry');
+          }
+          return 'done';
+        },
+        retry: {
+          maxRetries: 3,
+          delay: 20,
+          backoff: 'exponential',
+          backoffMultiplier: 3,
+          maxDelay: 50, // Cap at 50ms
+        },
+      });
+
+      await tree.run({});
+
+      expect(attempts).toBe(4);
+      // Without cap: 20ms, 60ms, 180ms
+      // With cap: 20ms, 50ms, 50ms
+      expect(delays[0]).toBeGreaterThanOrEqual(18);
+      expect(delays[0]).toBeLessThan(40);
+      expect(delays[1]).toBeGreaterThanOrEqual(48);
+      expect(delays[1]).toBeLessThan(70);
+      expect(delays[2]).toBeGreaterThanOrEqual(48);
+      expect(delays[2]).toBeLessThan(70);
+    });
+
+    it('should retry works in parallel execution', async () => {
+      let work1Attempts = 0;
+      let work2Attempts = 0;
+
+      const tree = Work.tree('tree').addParallel([
+        {
+          name: 'parallel1',
+          execute: async () => {
+            work1Attempts++;
+            if (work1Attempts < 2) {
+              throw new Error('retry1');
+            }
+            return 'success1';
+          },
+          retry: 2,
+        },
+        {
+          name: 'parallel2',
+          execute: async () => {
+            work2Attempts++;
+            if (work2Attempts < 3) {
+              throw new Error('retry2');
+            }
+            return 'success2';
+          },
+          retry: 3,
+        },
+      ]);
+
+      const result = await tree.run({});
+
+      expect(result.status).toBe(WorkStatus.Completed);
+      expect(result.context.workResults.get('parallel1')?.result).toBe('success1');
+      expect(result.context.workResults.get('parallel1')?.attempts).toBe(2);
+      expect(result.context.workResults.get('parallel2')?.result).toBe('success2');
+      expect(result.context.workResults.get('parallel2')?.attempts).toBe(3);
+    });
+
+    it('should combine retry with silenceError', async () => {
+      let attempts = 0;
+
+      const tree = Work.tree('tree')
+        .addSerial({
+          name: 'retryThenSilence',
+          execute: async () => {
+            attempts++;
+            throw new Error('always fails');
+          },
+          retry: 2,
+          silenceError: true,
+        })
+        .addSerial({
+          name: 'afterSilenced',
+          execute: async () => 'continued',
+        });
+
+      const result = await tree.run({});
+
+      expect(result.status).toBe(WorkStatus.Completed);
+      expect(attempts).toBe(3); // 1 initial + 2 retries
+      expect(result.context.workResults.get('retryThenSilence')?.status).toBe(WorkStatus.Failed);
+      expect(result.context.workResults.get('retryThenSilence')?.attempts).toBe(3);
+      expect(result.context.workResults.get('afterSilenced')?.result).toBe('continued');
+    });
+
+    it('should combine retry with onError handler', async () => {
+      let attempts = 0;
+      const onErrorFn = vi.fn();
+
+      const tree = Work.tree('tree')
+        .addSerial({
+          name: 'retryThenOnError',
+          execute: async () => {
+            attempts++;
+            throw new Error('always fails');
+          },
+          retry: 2,
+          onError: onErrorFn, // Swallows by not throwing
+        })
+        .addSerial({
+          name: 'afterOnError',
+          execute: async () => 'continued',
+        });
+
+      const result = await tree.run({});
+
+      expect(result.status).toBe(WorkStatus.Completed);
+      expect(attempts).toBe(3);
+      expect(onErrorFn).toHaveBeenCalledTimes(1); // Only called after all retries exhausted
+      expect(result.context.workResults.get('afterOnError')?.result).toBe('continued');
+    });
+
+    it('should track attempts as 1 for skipped work', async () => {
+      const tree = Work.tree('tree').addSerial({
+        name: 'skippedWork',
+        execute: async () => 'should not run',
+        shouldRun: () => false,
+        retry: 3,
+      });
+
+      const result = await tree.run({});
+
+      expect(result.context.workResults.get('skippedWork')?.status).toBe(WorkStatus.Skipped);
+      expect(result.context.workResults.get('skippedWork')?.attempts).toBe(1);
+    });
+
+    it('should provide context to shouldRetry callback', async () => {
+      const shouldRetryFn = vi.fn().mockReturnValue(true);
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'contextRetry',
+        execute: async () => {
+          throw new Error('fail');
+        },
+        retry: {
+          maxRetries: 1,
+          shouldRetry: shouldRetryFn,
+        },
+      });
+
+      await tree.run({ testData: 'value' });
+
+      expect(shouldRetryFn).toHaveBeenCalledTimes(1);
+      expect(shouldRetryFn.mock.calls[0][2].data).toEqual({ testData: 'value' });
+    });
+
+    it('should provide context to onRetry callback', async () => {
+      const onRetryFn = vi.fn();
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'contextOnRetry',
+        execute: async () => {
+          throw new Error('fail');
+        },
+        retry: {
+          maxRetries: 1,
+          onRetry: onRetryFn,
+        },
+      });
+
+      await tree.run({ testData: 'value' });
+
+      expect(onRetryFn).toHaveBeenCalledTimes(1);
+      expect(onRetryFn.mock.calls[0][2].data).toEqual({ testData: 'value' });
+    });
+
+    it('should use async shouldRetry callback', async () => {
+      let attempts = 0;
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'asyncShouldRetry',
+        execute: async () => {
+          attempts++;
+          throw new Error('fail');
+        },
+        retry: {
+          maxRetries: 3,
+          shouldRetry: async () => {
+            await new Promise((r) => setTimeout(r, 5));
+            return attempts < 2;
+          },
+        },
+      });
+
+      await tree.run({});
+
+      expect(attempts).toBe(2); // Stopped after async shouldRetry returned false
+    });
+
+    it('should use async onRetry callback', async () => {
+      let attempts = 0;
+      let hookCalled = false;
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'asyncOnRetry',
+        execute: async () => {
+          attempts++;
+          if (attempts < 2) {
+            throw new Error('retry');
+          }
+          return 'done';
+        },
+        retry: {
+          maxRetries: 2,
+          onRetry: async () => {
+            await new Promise((r) => setTimeout(r, 5));
+            hookCalled = true;
+          },
+        },
+      });
+
+      await tree.run({});
+
+      expect(hookCalled).toBe(true);
+      expect(attempts).toBe(2);
     });
   });
 });

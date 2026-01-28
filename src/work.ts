@@ -12,6 +12,8 @@ import {
   TreeResult,
   TreeRunOptions,
   SealedTreeWork,
+  RetryConfig,
+  RetryOptions,
 } from './work.types';
 import { WorkResultsMap } from './work-results-map';
 import { isTreeWorkDefinition } from './type-guards';
@@ -23,6 +25,82 @@ import { isTreeWorkDefinition } from './type-guards';
  */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type MaybeRecord<K extends string, V> = string extends K ? {} : { [P in K]: V };
+
+/**
+ * Normalized retry options with all defaults filled in
+ */
+type NormalizedRetryOptions = {
+  maxRetries: number;
+  delay: number;
+  backoff: 'fixed' | 'exponential';
+  backoffMultiplier: number;
+  maxDelay: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  shouldRetry?: RetryOptions<any, any>['shouldRetry'];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onRetry?: RetryOptions<any, any>['onRetry'];
+};
+
+/**
+ * Normalize retry config to full options with defaults
+ */
+function normalizeRetryConfig(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  retry: RetryConfig<any, any> | undefined
+): NormalizedRetryOptions | null {
+  if (retry === undefined) {
+    return null;
+  }
+
+  if (typeof retry === 'number') {
+    return {
+      maxRetries: retry,
+      delay: 0,
+      backoff: 'fixed',
+      backoffMultiplier: 2,
+      maxDelay: Infinity,
+    };
+  }
+
+  return {
+    maxRetries: retry.maxRetries,
+    delay: retry.delay ?? 0,
+    backoff: retry.backoff ?? 'fixed',
+    backoffMultiplier: retry.backoffMultiplier ?? 2,
+    maxDelay: retry.maxDelay ?? Infinity,
+    shouldRetry: retry.shouldRetry,
+    onRetry: retry.onRetry,
+  };
+}
+
+/**
+ * Calculate delay for a given retry attempt
+ * @param options Normalized retry options
+ * @param attempt Current attempt number (1-indexed, so attempt 1 is after first failure)
+ */
+function calculateRetryDelay(options: NormalizedRetryOptions, attempt: number): number {
+  if (options.delay === 0) {
+    return 0;
+  }
+
+  let delay: number;
+  if (options.backoff === 'exponential') {
+    // For exponential: delay * multiplier^(attempt-1)
+    // attempt 1: delay * 1, attempt 2: delay * multiplier, attempt 3: delay * multiplier^2
+    delay = options.delay * Math.pow(options.backoffMultiplier, attempt - 1);
+  } else {
+    delay = options.delay;
+  }
+
+  return Math.min(delay, options.maxDelay);
+}
+
+/**
+ * Sleep for a given number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
  * A standalone leaf Work unit that can be added to workflows.
@@ -86,6 +164,9 @@ export class Work<
   /** Optional: if true, errors won't stop the workflow (result will be undefined) */
   readonly silenceError?: boolean;
 
+  /** Optional: retry configuration - number of retries or full options */
+  readonly retry?: RetryConfig<TData, TAvailableWorkResults>;
+
   constructor(definition: IWorkDefinition<TName, TData, TResult, TAvailableWorkResults>) {
     this.name = definition.name;
     this.execute = definition.execute;
@@ -93,6 +174,7 @@ export class Work<
     this.onError = definition.onError;
     this.onSkipped = definition.onSkipped;
     this.silenceError = definition.silenceError;
+    this.retry = definition.retry;
   }
 
   /**
@@ -591,7 +673,7 @@ export class TreeWork<
   }
 
   /**
-   * Execute multiple nested works in parallel
+   * Execute multiple nested works in parallel with retry support
    */
   private async _executeParallelNestedWorks(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -628,6 +710,7 @@ export class TreeWork<
             status: WorkStatus.Skipped,
             duration: Date.now() - workStartTime,
             parent: parentName,
+            attempts: 1,
           };
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           context.workResults.set(workDef.name as any, skippedResult as any);
@@ -640,47 +723,85 @@ export class TreeWork<
         }
       }
 
-      try {
-        const result = await workDef.execute(context);
-        const completedResult: WorkResult = {
-          status: WorkStatus.Completed,
-          result,
-          duration: Date.now() - workStartTime,
-          parent: parentName,
-        };
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        context.workResults.set(workDef.name as any, completedResult as any);
-        workResults.set(workDef.name, completedResult);
-        return { name: workDef.name, result };
-      } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
-        const duration = Date.now() - workStartTime;
+      // Retry logic for parallel works
+      const retryOptions = normalizeRetryConfig(workDef.retry);
+      const maxAttempts = retryOptions ? retryOptions.maxRetries + 1 : 1;
+      let lastError: Error | null = null;
+      let attempt = 0;
 
-        const failedResult: WorkResult = {
-          status: WorkStatus.Failed,
-          error: err,
-          duration,
-          parent: parentName,
-        };
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        context.workResults.set(workDef.name as any, failedResult as any);
-        workResults.set(workDef.name, failedResult);
+      while (attempt < maxAttempts) {
+        attempt++;
 
-        if (workDef.silenceError) {
-          return { name: workDef.name, handled: true };
-        }
+        try {
+          const result = await workDef.execute(context);
+          const completedResult: WorkResult = {
+            status: WorkStatus.Completed,
+            result,
+            duration: Date.now() - workStartTime,
+            parent: parentName,
+            attempts: attempt,
+          };
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          context.workResults.set(workDef.name as any, completedResult as any);
+          workResults.set(workDef.name, completedResult);
+          return { name: workDef.name, result };
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
 
-        if (workDef.onError) {
-          try {
-            await workDef.onError(err, context);
-            return { name: workDef.name, handled: true };
-          } catch {
-            return { name: workDef.name, error: err };
+          // Check if we should retry
+          const isLastAttempt = attempt >= maxAttempts;
+          if (!isLastAttempt && retryOptions) {
+            // Check shouldRetry callback if provided
+            if (retryOptions.shouldRetry) {
+              const shouldRetry = await retryOptions.shouldRetry(lastError, attempt, context);
+              if (!shouldRetry) {
+                break; // Stop retrying
+              }
+            }
+
+            // Call onRetry hook before the retry
+            if (retryOptions.onRetry) {
+              await retryOptions.onRetry(lastError, attempt, context);
+            }
+
+            // Calculate and wait for delay
+            const delay = calculateRetryDelay(retryOptions, attempt);
+            if (delay > 0) {
+              await sleep(delay);
+            }
           }
         }
-
-        return { name: workDef.name, error: err };
       }
+
+      // All attempts failed
+      const err = lastError!;
+      const duration = Date.now() - workStartTime;
+
+      const failedResult: WorkResult = {
+        status: WorkStatus.Failed,
+        error: err,
+        duration,
+        parent: parentName,
+        attempts: attempt,
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      context.workResults.set(workDef.name as any, failedResult as any);
+      workResults.set(workDef.name, failedResult);
+
+      if (workDef.silenceError) {
+        return { name: workDef.name, handled: true };
+      }
+
+      if (workDef.onError) {
+        try {
+          await workDef.onError(err, context);
+          return { name: workDef.name, handled: true };
+        } catch {
+          return { name: workDef.name, error: err };
+        }
+      }
+
+      return { name: workDef.name, error: err };
     });
 
     const parallelResults = await Promise.all(promises);
@@ -705,7 +826,7 @@ export class TreeWork<
   }
 
   /**
-   * Execute a single leaf work with parent tracking
+   * Execute a single leaf work with parent tracking and retry support
    */
   private async _executeLeafWork(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -724,6 +845,7 @@ export class TreeWork<
           status: WorkStatus.Skipped,
           duration: Date.now() - workStartTime,
           parent: parentName,
+          attempts: 1,
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         context.workResults.set(work.name as any, skippedResult as any);
@@ -736,40 +858,78 @@ export class TreeWork<
       }
     }
 
-    try {
-      const result = await work.execute(context);
-      const completedResult: WorkResult = {
-        status: WorkStatus.Completed,
-        result,
-        duration: Date.now() - workStartTime,
-        parent: parentName,
-      };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      context.workResults.set(work.name as any, completedResult as any);
-      workResults.set(work.name, completedResult);
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      const failedResult: WorkResult = {
-        status: WorkStatus.Failed,
-        error: err,
-        duration: Date.now() - workStartTime,
-        parent: parentName,
-      };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      context.workResults.set(work.name as any, failedResult as any);
-      workResults.set(work.name, failedResult);
+    const retryOptions = normalizeRetryConfig(work.retry);
+    const maxAttempts = retryOptions ? retryOptions.maxRetries + 1 : 1;
+    let lastError: Error | null = null;
+    let attempt = 0;
 
-      if (work.silenceError) {
+    while (attempt < maxAttempts) {
+      attempt++;
+
+      try {
+        const result = await work.execute(context);
+        const completedResult: WorkResult = {
+          status: WorkStatus.Completed,
+          result,
+          duration: Date.now() - workStartTime,
+          parent: parentName,
+          attempts: attempt,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        context.workResults.set(work.name as any, completedResult as any);
+        workResults.set(work.name, completedResult);
         return;
-      }
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
 
-      if (work.onError) {
-        await work.onError(err, context);
-        return;
-      }
+        // Check if we should retry
+        const isLastAttempt = attempt >= maxAttempts;
+        if (!isLastAttempt && retryOptions) {
+          // Check shouldRetry callback if provided
+          if (retryOptions.shouldRetry) {
+            const shouldRetry = await retryOptions.shouldRetry(lastError, attempt, context);
+            if (!shouldRetry) {
+              break; // Stop retrying
+            }
+          }
 
-      throw err;
+          // Call onRetry hook before the retry
+          if (retryOptions.onRetry) {
+            await retryOptions.onRetry(lastError, attempt, context);
+          }
+
+          // Calculate and wait for delay
+          const delay = calculateRetryDelay(retryOptions, attempt);
+          if (delay > 0) {
+            await sleep(delay);
+          }
+        }
+      }
     }
+
+    // All attempts failed
+    const err = lastError!;
+    const failedResult: WorkResult = {
+      status: WorkStatus.Failed,
+      error: err,
+      duration: Date.now() - workStartTime,
+      parent: parentName,
+      attempts: attempt,
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    context.workResults.set(work.name as any, failedResult as any);
+    workResults.set(work.name, failedResult);
+
+    if (work.silenceError) {
+      return;
+    }
+
+    if (work.onError) {
+      await work.onError(err, context);
+      return;
+    }
+
+    throw err;
   }
 }
 
