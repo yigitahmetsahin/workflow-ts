@@ -105,7 +105,28 @@ export type RetryConfig<
 > = number | RetryOptions<TData, TAvailableWorkResults>;
 
 /**
- * Common behavior options for works and trees (shouldRun, onError, onSkipped, silenceError, retry)
+ * Full timeout configuration options
+ */
+export type TimeoutOptions<
+  TData = Record<string, unknown>,
+  TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  /** Timeout duration in milliseconds */
+  ms: number;
+  /** Optional: called when timeout occurs (before error is thrown) */
+  onTimeout?: (context: WorkflowContext<TData, TAvailableWorkResults>) => void | Promise<void>;
+};
+
+/**
+ * Timeout configuration - either a simple timeout in milliseconds or full options
+ */
+export type TimeoutConfig<
+  TData = Record<string, unknown>,
+  TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
+> = number | TimeoutOptions<TData, TAvailableWorkResults>;
+
+/**
+ * Common behavior options for works and trees (shouldRun, onError, onSkipped, silenceError, retry, timeout)
  */
 export type WorkBehaviorOptions<
   TData = Record<string, unknown>,
@@ -126,6 +147,8 @@ export type WorkBehaviorOptions<
   silenceError?: boolean;
   /** Optional: retry configuration - number of retries or full options */
   retry?: RetryConfig<TData, TAvailableWorkResults>;
+  /** Optional: timeout configuration - milliseconds or full options */
+  timeout?: TimeoutConfig<TData, TAvailableWorkResults>;
 };
 
 /**

@@ -191,6 +191,7 @@ const myWork = new Work({
   onSkipped: (ctx) => {}, // optional - called when shouldRun returns false
   silenceError: true, // optional - don't fail tree on error
   retry: 3, // optional - retry up to 3 times on failure
+  timeout: 5000, // optional - timeout after 5 seconds
 });
 
 // Retry with full configuration
@@ -206,6 +207,24 @@ const retryWork = new Work({
     shouldRetry: (error, attempt, ctx) => !error.message.includes('401'),
     onRetry: (error, attempt, ctx) => console.log(`Retry ${attempt}...`),
   },
+});
+
+// Timeout with full configuration
+const timeoutWork = new Work({
+  name: 'timeoutWork',
+  execute: async (ctx) => slowOperation(),
+  timeout: {
+    ms: 10000, // 10 second timeout
+    onTimeout: (ctx) => console.log('Operation timed out'), // optional callback
+  },
+});
+
+// Timeout with retry (retries on timeout)
+const timeoutRetryWork = new Work({
+  name: 'timeoutRetry',
+  execute: async (ctx) => unreliableService(),
+  timeout: 5000,
+  retry: 3, // will retry up to 3 times if operation times out
 });
 
 // Use Work instances in trees
@@ -235,6 +254,7 @@ const conditionalTree = Work.tree('conditional', {
   silenceError: true, // Don't fail parent on error
   onError: (error, ctx) => {}, // Handle tree errors
   onSkipped: (ctx) => {}, // Called when tree is skipped
+  timeout: 60000, // Timeout entire tree after 60 seconds
 }).addSerial({ name: 'work', execute: async () => 'result' });
 
 // Seal tree to prevent modifications
