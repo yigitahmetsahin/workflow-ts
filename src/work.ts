@@ -14,6 +14,8 @@ import {
   SealedTreeWork,
   RetryConfig,
   RetryOptions,
+  TimeoutConfig,
+  TimeoutOptions,
 } from './work.types';
 import { WorkResultsMap } from './work-results-map';
 import { isTreeWorkDefinition } from './type-guards';
@@ -103,6 +105,96 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Error thrown when a work execution times out
+ */
+export class TimeoutError extends Error {
+  /** The name of the work that timed out */
+  readonly workName: string;
+  /** The timeout duration in milliseconds */
+  readonly timeoutMs: number;
+
+  constructor(workName: string, timeoutMs: number) {
+    super(`Work "${workName}" timed out after ${timeoutMs}ms`);
+    this.name = 'TimeoutError';
+    this.workName = workName;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+/**
+ * Normalized timeout options with all defaults filled in
+ */
+type NormalizedTimeoutOptions = {
+  ms: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onTimeout?: TimeoutOptions<any, any>['onTimeout'];
+};
+
+/**
+ * Normalize timeout config to full options with defaults
+ */
+function normalizeTimeoutConfig(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  timeout: TimeoutConfig<any, any> | undefined
+): NormalizedTimeoutOptions | null {
+  if (timeout === undefined) {
+    return null;
+  }
+
+  if (typeof timeout === 'number') {
+    return { ms: timeout };
+  }
+
+  return {
+    ms: timeout.ms,
+    onTimeout: timeout.onTimeout,
+  };
+}
+
+/**
+ * Execute a function with a timeout
+ * @param execute The function to execute
+ * @param workName The name of the work (for error message)
+ * @param timeoutConfig Normalized timeout configuration
+ * @param context The workflow context (passed to onTimeout callback)
+ * @returns The result of the execute function
+ * @throws TimeoutError if the execution times out
+ */
+async function executeWithTimeout<TResult>(
+  execute: () => Promise<TResult>,
+  workName: string,
+  timeoutConfig: NormalizedTimeoutOptions | null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  context: WorkflowContext<any, any>
+): Promise<TResult> {
+  if (!timeoutConfig) {
+    return execute();
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      // Fire onTimeout callback (don't await, fire-and-forget to not delay rejection)
+      if (timeoutConfig.onTimeout) {
+        Promise.resolve(timeoutConfig.onTimeout(context)).catch(() => {
+          // Ignore errors in onTimeout callback
+        });
+      }
+      reject(new TimeoutError(workName, timeoutConfig.ms));
+    }, timeoutConfig.ms);
+  });
+
+  try {
+    return await Promise.race([execute(), timeoutPromise]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+/**
  * A standalone leaf Work unit that can be added to workflows.
  * Implements IWorkDefinition so it can be used anywhere a work definition is expected.
  *
@@ -167,6 +259,9 @@ export class Work<
   /** Optional: retry configuration - number of retries or full options */
   readonly retry?: RetryConfig<TData, TAvailableWorkResults>;
 
+  /** Optional: timeout configuration - milliseconds or full options */
+  readonly timeout?: TimeoutConfig<TData, TAvailableWorkResults>;
+
   constructor(definition: IWorkDefinition<TName, TData, TResult, TAvailableWorkResults>) {
     this.name = definition.name;
     this.execute = definition.execute;
@@ -175,6 +270,7 @@ export class Work<
     this.onSkipped = definition.onSkipped;
     this.silenceError = definition.silenceError;
     this.retry = definition.retry;
+    this.timeout = definition.timeout;
   }
 
   /**
@@ -279,12 +375,16 @@ export class TreeWork<
   /** Optional: if true, errors won't stop the workflow */
   readonly silenceError?: boolean;
 
+  /** Optional: timeout configuration - milliseconds or full options */
+  readonly timeout?: TimeoutConfig<TData, TBase>;
+
   constructor(options: TreeWorkOptions<TName, TData, TBase>) {
     this.name = options.name;
     this.shouldRun = options.shouldRun;
     this.onError = options.onError;
     this.onSkipped = options.onSkipped;
     this.silenceError = options.silenceError;
+    this.timeout = options.timeout;
     this._options = {
       failFast: options.failFast ?? true,
     };
@@ -499,9 +599,13 @@ export class TreeWork<
       workResults: workResultsMap,
     };
 
+    // Normalize tree-level timeout
+    const timeoutOptions = normalizeTimeoutConfig(this.timeout);
+
     try {
-      // Execute this tree
-      const result = await this._executeTree(this, context, workResults, startTime);
+      // Execute this tree (with timeout if configured)
+      const executeTree = () => this._executeTree(this, context, workResults, startTime);
+      const result = await executeWithTimeout(executeTree, this.name, timeoutOptions, context);
 
       if (result.error) {
         return {
@@ -725,6 +829,7 @@ export class TreeWork<
 
       // Retry logic for parallel works
       const retryOptions = normalizeRetryConfig(workDef.retry);
+      const timeoutOptions = normalizeTimeoutConfig(workDef.timeout);
       const maxAttempts = retryOptions ? retryOptions.maxRetries + 1 : 1;
       let lastError: Error | null = null;
       let attempt = 0;
@@ -733,7 +838,12 @@ export class TreeWork<
         attempt++;
 
         try {
-          const result = await workDef.execute(context);
+          const result = await executeWithTimeout(
+            () => workDef.execute(context),
+            workDef.name,
+            timeoutOptions,
+            context
+          );
           const completedResult: WorkResult = {
             status: WorkStatus.Completed,
             result,
@@ -859,6 +969,7 @@ export class TreeWork<
     }
 
     const retryOptions = normalizeRetryConfig(work.retry);
+    const timeoutOptions = normalizeTimeoutConfig(work.timeout);
     const maxAttempts = retryOptions ? retryOptions.maxRetries + 1 : 1;
     let lastError: Error | null = null;
     let attempt = 0;
@@ -867,7 +978,12 @@ export class TreeWork<
       attempt++;
 
       try {
-        const result = await work.execute(context);
+        const result = await executeWithTimeout(
+          () => work.execute(context),
+          work.name,
+          timeoutOptions,
+          context
+        );
         const completedResult: WorkResult = {
           status: WorkStatus.Completed,
           result,

@@ -18,6 +18,7 @@ A simple, extensible TypeScript workflow engine supporting serial and parallel w
 - ⏭️ **Conditional Execution** - Skip work items based on runtime conditions
 - 🛡️ **Error Handling** - Built-in error callbacks and silenceError option
 - 🔄 **Retry Mechanism** - Configurable retries with exponential backoff
+- ⏱️ **Timeout Support** - Set execution time limits with customizable callbacks
 - 📊 **Execution Tracking** - Duration tracking for individual works and total workflow
 - 🪶 **Zero Dependencies** - Lightweight with no external runtime dependencies
 
@@ -201,6 +202,7 @@ Each work can have the following properties:
   onSkipped: (ctx) => {},     // Optional: called when skipped
   silenceError: false,        // Optional: continue on error
   retry: 3,                   // Optional: retry configuration
+  timeout: 5000,              // Optional: timeout in ms
 }
 ```
 
@@ -497,6 +499,115 @@ tree.addSerial({
 });
 ```
 
+## Timeout
+
+Works can be configured to timeout if execution takes too long.
+
+### Simple Timeout
+
+```typescript
+tree.addSerial({
+  name: 'slowOperation',
+  execute: async () => {
+    // If this takes longer than 5 seconds, it will timeout
+    return await fetchDataFromSlowService();
+  },
+  timeout: 5000, // 5 seconds
+});
+```
+
+### Full Timeout Configuration
+
+```typescript
+tree.addSerial({
+  name: 'apiCall',
+  execute: async () => {
+    return await fetch('/api/slow-endpoint');
+  },
+  timeout: {
+    ms: 10000, // 10 seconds
+    onTimeout: async (ctx) => {
+      // Called when timeout occurs (before error is thrown)
+      console.log('Operation timed out for user:', ctx.data.userId);
+      // Useful for logging, cleanup, or alerting
+    },
+  },
+});
+```
+
+### Tree-Level Timeout
+
+Apply a timeout to the entire tree execution:
+
+```typescript
+const tree = Work.tree('workflow', {
+  timeout: 60000, // Entire tree must complete within 60 seconds
+})
+  .addSerial({ name: 'step1', execute: async () => 'a' })
+  .addSerial({ name: 'step2', execute: async () => 'b' })
+  .addSerial({ name: 'step3', execute: async () => 'c' });
+```
+
+### Timeout with Retry
+
+Timeout works seamlessly with retry - if a work times out, it can trigger a retry:
+
+```typescript
+tree.addSerial({
+  name: 'unreliableService',
+  execute: async () => {
+    // Sometimes this is slow, sometimes fast
+    return await unreliableApi();
+  },
+  timeout: 3000, // Timeout after 3 seconds
+  retry: 2, // Retry up to 2 times on timeout (or any error)
+});
+```
+
+### Handling Timeout Errors
+
+Timeout errors are instances of `TimeoutError`:
+
+```typescript
+import { Work, TimeoutError, WorkStatus } from '@yigitahmetsahin/work-tree';
+
+const result = await tree.run({});
+
+if (result.status === WorkStatus.Failed && result.error instanceof TimeoutError) {
+  console.log('Work timed out:', result.error.workName);
+  console.log('Timeout was:', result.error.timeoutMs, 'ms');
+}
+```
+
+### Timeout with Error Handling
+
+```typescript
+tree.addSerial({
+  name: 'timeoutWithHandler',
+  execute: async () => {
+    await new Promise((r) => setTimeout(r, 10000)); // Slow operation
+    return 'done';
+  },
+  timeout: 3000,
+  silenceError: true, // Tree continues even if this times out
+});
+
+// Or with onError
+tree.addSerial({
+  name: 'timeoutWithOnError',
+  execute: async () => {
+    await new Promise((r) => setTimeout(r, 10000));
+    return 'done';
+  },
+  timeout: 3000,
+  onError: async (error, ctx) => {
+    // Called when timeout occurs (error is TimeoutError)
+    console.log('Handling timeout:', error.message);
+    // Don't throw → tree continues
+  },
+});
+```
+
 ## WorkResult Structure
 
 ```typescript
@@ -560,6 +671,7 @@ See the `examples/` folder for complete examples:
 - `conditional.ts` - Skip steps with shouldRun
 - `error-handling.ts` - Error handling patterns
 - `retry.ts` - Retry mechanisms with backoff
+- `timeout.ts` - Timeout configuration and handling
 - `work-class.ts` - Reusable Work instances
 - `tree-work.ts` - Nested tree structures
 - `sealed.ts` - Sealing trees to prevent modifications

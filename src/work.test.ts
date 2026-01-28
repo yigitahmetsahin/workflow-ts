@@ -94,6 +94,41 @@ describe('Work', () => {
 
       expect(work.retry).toBeUndefined();
     });
+
+    it('should assign timeout as number from definition', () => {
+      const work = new Work({
+        name: 'timeoutNumber',
+        execute: async () => 'result',
+        timeout: 5000,
+      });
+
+      expect(work.timeout).toBe(5000);
+    });
+
+    it('should assign timeout as object from definition', () => {
+      const onTimeoutFn = vi.fn();
+      const timeoutOptions = {
+        ms: 10000,
+        onTimeout: onTimeoutFn,
+      };
+
+      const work = new Work({
+        name: 'timeoutObject',
+        execute: async () => 'result',
+        timeout: timeoutOptions,
+      });
+
+      expect(work.timeout).toEqual(timeoutOptions);
+    });
+
+    it('should leave timeout undefined when not provided', () => {
+      const work = new Work({
+        name: 'noTimeout',
+        execute: async () => 'result',
+      });
+
+      expect(work.timeout).toBeUndefined();
+    });
   });
 
   describe('execute', () => {

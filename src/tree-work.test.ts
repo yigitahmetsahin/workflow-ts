@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Work } from './work';
+import { Work, TimeoutError } from './work';
 import { WorkStatus } from './work.types';
 
 describe('TreeWork.run()', () => {
@@ -1557,6 +1557,377 @@ describe('TreeWork.run()', () => {
 
       expect(hookCalled).toBe(true);
       expect(attempts).toBe(2);
+    });
+  });
+
+  describe('timeout behavior', () => {
+    it('should timeout work when execution exceeds timeout (simple number)', async () => {
+      const tree = Work.tree('tree').addSerial({
+        name: 'slowWork',
+        execute: async () => {
+          await new Promise((r) => setTimeout(r, 100));
+          return 'should not return';
+        },
+        timeout: 30,
+      });
+
+      const result = await tree.run({});
+
+      expect(result.status).toBe(WorkStatus.Failed);
+      expect(result.error).toBeInstanceOf(TimeoutError);
+      expect(result.error?.message).toBe('Work "slowWork" timed out after 30ms');
+    });
+
+    it('should complete work when execution finishes before timeout', async () => {
+      const tree = Work.tree('tree').addSerial({
+        name: 'fastWork',
+        execute: async () => {
+          await new Promise((r) => setTimeout(r, 10));
+          return 'completed';
+        },
+        timeout: 100,
+      });
+
+      const result = await tree.run({});
+
+      expect(result.status).toBe(WorkStatus.Completed);
+      expect(result.context.workResults.get('fastWork')?.result).toBe('completed');
+    });
+
+    it('should call onTimeout callback when work times out', async () => {
+      const onTimeoutFn = vi.fn();
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'slowWork',
+        execute: async () => {
+          await new Promise((r) => setTimeout(r, 100));
+          return 'should not return';
+        },
+        timeout: {
+          ms: 30,
+          onTimeout: onTimeoutFn,
+        },
+      });
+
+      const result = await tree.run({ userId: '123' });
+
+      expect(result.status).toBe(WorkStatus.Failed);
+      expect(onTimeoutFn).toHaveBeenCalledTimes(1);
+      expect(onTimeoutFn.mock.calls[0][0].data).toEqual({ userId: '123' });
+    });
+
+    it('should not call onTimeout callback when work completes in time', async () => {
+      const onTimeoutFn = vi.fn();
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'fastWork',
+        execute: async () => {
+          await new Promise((r) => setTimeout(r, 10));
+          return 'done';
+        },
+        timeout: {
+          ms: 100,
+          onTimeout: onTimeoutFn,
+        },
+      });
+
+      await tree.run({});
+
+      expect(onTimeoutFn).not.toHaveBeenCalled();
+    });
+
+    it('should timeout parallel works independently', async () => {
+      const tree = Work.tree('tree', { failFast: false }).addParallel([
+        {
+          name: 'slowWork',
+          execute: async () => {
+            await new Promise((r) => setTimeout(r, 100));
+            return 'slow';
+          },
+          timeout: 30,
+        },
+        {
+          name: 'fastWork',
+          execute: async () => {
+            await new Promise((r) => setTimeout(r, 10));
+            return 'fast';
+          },
+          timeout: 100,
+        },
+      ]);
+
+      const result = await tree.run({});
+
+      // With failFast: false, the tree completes but slowWork failed
+      expect(result.status).toBe(WorkStatus.Completed);
+      expect(result.context.workResults.get('slowWork')?.status).toBe(WorkStatus.Failed);
+      expect(result.context.workResults.get('slowWork')?.error).toBeInstanceOf(TimeoutError);
+      expect(result.context.workResults.get('fastWork')?.result).toBe('fast');
+    });
+
+    it('should trigger retry on timeout when both configured', async () => {
+      let attempts = 0;
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'timeoutRetry',
+        execute: async () => {
+          attempts++;
+          if (attempts < 3) {
+            // First two attempts timeout
+            await new Promise((r) => setTimeout(r, 100));
+          }
+          return 'success';
+        },
+        timeout: 30,
+        retry: 3,
+      });
+
+      const result = await tree.run({});
+
+      expect(result.status).toBe(WorkStatus.Completed);
+      expect(result.context.workResults.get('timeoutRetry')?.result).toBe('success');
+      expect(attempts).toBe(3);
+      expect(result.context.workResults.get('timeoutRetry')?.attempts).toBe(3);
+    });
+
+    it('should fail after exhausting retries on repeated timeouts', async () => {
+      let attempts = 0;
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'alwaysTimeout',
+        execute: async () => {
+          attempts++;
+          await new Promise((r) => setTimeout(r, 100));
+          return 'should not return';
+        },
+        timeout: 30,
+        retry: 2,
+      });
+
+      const result = await tree.run({});
+
+      expect(result.status).toBe(WorkStatus.Failed);
+      expect(result.error).toBeInstanceOf(TimeoutError);
+      expect(attempts).toBe(3); // 1 initial + 2 retries
+      expect(result.context.workResults.get('alwaysTimeout')?.attempts).toBe(3);
+    });
+
+    it('should continue tree when timeout error is silenced', async () => {
+      const tree = Work.tree('tree')
+        .addSerial({
+          name: 'silencedTimeout',
+          execute: async () => {
+            await new Promise((r) => setTimeout(r, 100));
+            return 'should not return';
+          },
+          timeout: 30,
+          silenceError: true,
+        })
+        .addSerial({
+          name: 'afterTimeout',
+          execute: async () => 'continued',
+        });
+
+      const result = await tree.run({});
+
+      expect(result.status).toBe(WorkStatus.Completed);
+      expect(result.context.workResults.get('silencedTimeout')?.status).toBe(WorkStatus.Failed);
+      expect(result.context.workResults.get('afterTimeout')?.result).toBe('continued');
+    });
+
+    it('should call onError handler on timeout', async () => {
+      const onErrorFn = vi.fn();
+
+      const tree = Work.tree('tree')
+        .addSerial({
+          name: 'timeoutWithHandler',
+          execute: async () => {
+            await new Promise((r) => setTimeout(r, 100));
+            return 'should not return';
+          },
+          timeout: 30,
+          onError: onErrorFn, // Swallows by not throwing
+        })
+        .addSerial({
+          name: 'afterTimeout',
+          execute: async () => 'continued',
+        });
+
+      const result = await tree.run({});
+
+      expect(onErrorFn).toHaveBeenCalledTimes(1);
+      expect(onErrorFn.mock.calls[0][0]).toBeInstanceOf(TimeoutError);
+      expect(result.status).toBe(WorkStatus.Completed);
+      expect(result.context.workResults.get('afterTimeout')?.result).toBe('continued');
+    });
+
+    it('should timeout entire tree with tree-level timeout', async () => {
+      const tree = Work.tree('tree', { timeout: 50 })
+        .addSerial({
+          name: 'step1',
+          execute: async () => {
+            await new Promise((r) => setTimeout(r, 20));
+            return 'a';
+          },
+        })
+        .addSerial({
+          name: 'step2',
+          execute: async () => {
+            await new Promise((r) => setTimeout(r, 100)); // This will cause tree timeout
+            return 'b';
+          },
+        });
+
+      const result = await tree.run({});
+
+      expect(result.status).toBe(WorkStatus.Failed);
+      expect(result.error).toBeInstanceOf(TimeoutError);
+      expect(result.error?.message).toBe('Work "tree" timed out after 50ms');
+    });
+
+    it('should complete tree when all works finish before tree timeout', async () => {
+      const tree = Work.tree('tree', { timeout: 200 })
+        .addSerial({
+          name: 'step1',
+          execute: async () => {
+            await new Promise((r) => setTimeout(r, 20));
+            return 'a';
+          },
+        })
+        .addSerial({
+          name: 'step2',
+          execute: async () => {
+            await new Promise((r) => setTimeout(r, 20));
+            return 'b';
+          },
+        });
+
+      const result = await tree.run({});
+
+      expect(result.status).toBe(WorkStatus.Completed);
+      expect(result.context.workResults.get('step1')?.result).toBe('a');
+      expect(result.context.workResults.get('step2')?.result).toBe('b');
+    });
+
+    it('should call tree-level onTimeout when tree times out', async () => {
+      const onTimeoutFn = vi.fn();
+
+      const tree = Work.tree('tree', {
+        timeout: {
+          ms: 30,
+          onTimeout: onTimeoutFn,
+        },
+      }).addSerial({
+        name: 'slowWork',
+        execute: async () => {
+          await new Promise((r) => setTimeout(r, 100));
+          return 'should not return';
+        },
+      });
+
+      const result = await tree.run({ treeData: 'value' });
+
+      expect(result.status).toBe(WorkStatus.Failed);
+      expect(onTimeoutFn).toHaveBeenCalledTimes(1);
+      expect(onTimeoutFn.mock.calls[0][0].data).toEqual({ treeData: 'value' });
+    });
+
+    it('should timeout work in parallel with retry', async () => {
+      let attempts = 0;
+
+      const tree = Work.tree('tree').addParallel([
+        {
+          name: 'parallelTimeout',
+          execute: async () => {
+            attempts++;
+            if (attempts < 2) {
+              await new Promise((r) => setTimeout(r, 100));
+            }
+            return 'success';
+          },
+          timeout: 30,
+          retry: 2,
+        },
+        {
+          name: 'fastWork',
+          execute: async () => 'fast',
+        },
+      ]);
+
+      const result = await tree.run({});
+
+      expect(result.status).toBe(WorkStatus.Completed);
+      expect(result.context.workResults.get('parallelTimeout')?.result).toBe('success');
+      expect(result.context.workResults.get('parallelTimeout')?.attempts).toBe(2);
+      expect(result.context.workResults.get('fastWork')?.result).toBe('fast');
+    });
+
+    it('should verify TimeoutError has correct properties', async () => {
+      const tree = Work.tree('tree').addSerial({
+        name: 'testTimeout',
+        execute: async () => {
+          await new Promise((r) => setTimeout(r, 100));
+          return 'should not return';
+        },
+        timeout: 30,
+      });
+
+      const result = await tree.run({});
+
+      expect(result.error).toBeInstanceOf(TimeoutError);
+      const timeoutError = result.error as TimeoutError;
+      expect(timeoutError.name).toBe('TimeoutError');
+      expect(timeoutError.workName).toBe('testTimeout');
+      expect(timeoutError.timeoutMs).toBe(30);
+    });
+
+    it('should handle async onTimeout callback', async () => {
+      let callbackCompleted = false;
+
+      const tree = Work.tree('tree').addSerial({
+        name: 'asyncTimeout',
+        execute: async () => {
+          await new Promise((r) => setTimeout(r, 100));
+          return 'should not return';
+        },
+        timeout: {
+          ms: 30,
+          onTimeout: async () => {
+            // Note: onTimeout is fire-and-forget, but we can still test it completes
+            await new Promise((r) => setTimeout(r, 5));
+            callbackCompleted = true;
+          },
+        },
+      });
+
+      await tree.run({});
+
+      // Give a bit of time for the async callback to complete
+      await new Promise((r) => setTimeout(r, 20));
+      expect(callbackCompleted).toBe(true);
+    });
+
+    it('should ignore errors in onTimeout callback', async () => {
+      const tree = Work.tree('tree').addSerial({
+        name: 'errorInCallback',
+        execute: async () => {
+          await new Promise((r) => setTimeout(r, 100));
+          return 'should not return';
+        },
+        timeout: {
+          ms: 30,
+          onTimeout: async () => {
+            throw new Error('Callback error');
+          },
+        },
+      });
+
+      const result = await tree.run({});
+
+      // Should still fail with TimeoutError, not the callback error
+      expect(result.status).toBe(WorkStatus.Failed);
+      expect(result.error).toBeInstanceOf(TimeoutError);
+      expect(result.error?.message).toBe('Work "errorInCallback" timed out after 30ms');
     });
   });
 });

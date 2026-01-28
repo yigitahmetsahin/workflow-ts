@@ -13,6 +13,7 @@ npx tsx examples/parallel.ts
 npx tsx examples/conditional.ts
 npx tsx examples/error-handling.ts
 npx tsx examples/retry.ts
+npx tsx examples/timeout.ts
 npx tsx examples/work-class.ts
 npx tsx examples/tree-work.ts
 npx tsx examples/sealed.ts
@@ -128,7 +129,20 @@ Retry mechanisms demonstrating:
 - Combining retry with `silenceError` for non-critical work
 - Tracking attempts via `WorkResult.attempts`
 
-### 6. Work Class (`work-class.ts`)
+### 6. Timeout (`timeout.ts`)
+
+Timeout mechanisms demonstrating:
+
+- Simple timeout (`timeout: 5000`)
+- Timeout with `onTimeout` callback for logging/cleanup
+- Tree-level timeout for entire workflow
+- Timeout with retry (timeouts trigger retries)
+- Timeout with `silenceError` for non-critical work
+- Timeout with `onError` for custom error handling
+- Parallel works with individual timeouts
+- Using `TimeoutError` class for type-safe error handling
+
+### 7. Work Class (`work-class.ts`)
 
 Standalone work definitions demonstrating:
 
@@ -138,7 +152,7 @@ Standalone work definitions demonstrating:
 - Reusing the same Work across multiple trees
 - Conditional execution with Work class
 
-### 7. Tree Work (`tree-work.ts`)
+### 8. Tree Work (`tree-work.ts`)
 
 Nested tree-like structures demonstrating:
 
@@ -149,7 +163,7 @@ Nested tree-like structures demonstrating:
 - Parent tracking for nested works
 - Tree-level `shouldRun`, `onError`, and `silenceError`
 
-### 8. Sealed (`sealed.ts`)
+### 9. Sealed (`sealed.ts`)
 
 Sealing trees to prevent modifications:
 
