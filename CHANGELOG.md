@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [6.2.0](https://github.com/yigitahmetsahin/work-tree/compare/v6.1.2...v6.2.0) (2026-01-28)
+
+
+### Features
+
+* add onSkipped hook for conditional work execution ([27551e7](https://github.com/yigitahmetsahin/work-tree/commit/27551e721625623094be5df22e2f21680cba0569))
+
 ## [6.1.2](https://github.com/yigitahmetsahin/work-tree/compare/v6.1.1...v6.1.2) (2026-01-26)
 
 
