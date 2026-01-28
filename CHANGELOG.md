@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [6.4.1](https://github.com/yigitahmetsahin/work-tree/compare/v6.4.0...v6.4.1) (2026-01-28)
+
+
+### Refactoring
+
+* reorganize codebase with dedicated folders for helpers, utils, and errors ([3329f6d](https://github.com/yigitahmetsahin/work-tree/commit/3329f6db25ab86285d6f058986fa7e9bd766b310))
+
 ## [6.4.0](https://github.com/yigitahmetsahin/work-tree/compare/v6.3.0...v6.4.0) (2026-01-28)
 
 
