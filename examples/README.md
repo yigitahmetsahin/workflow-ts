@@ -116,6 +116,8 @@ Error handling demonstrating:
 - Tree failure states
 - Accessing error details via `WorkResult.error`
 - Error recovery patterns
+- Using `WorkTreeError` base class to catch all library errors
+- Using `TimeoutError` for type-safe timeout handling
 
 ### 5. Retry (`retry.ts`)
 

@@ -1,3 +1,5 @@
 export * from './work';
+export * from './tree-work';
 export * from './work.types';
-export * from './type-guards';
+export * from './errors';
+export * from './utils';

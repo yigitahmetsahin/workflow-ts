@@ -45,16 +45,71 @@ npm run lint:check
 
 This distinction helps clarify intent: interfaces define behavior contracts, types define data shapes. Enums provide type safety and prevent `@typescript-eslint/no-unsafe-enum-comparison` errors in consuming projects.
 
+### Type File Policy (STRICT)
+
+**All types MUST be defined in type files.** Do NOT define types directly in class files or implementation files.
+
+Type files:
+
+- `work.types.ts` - Core types (WorkResult, WorkStatus, IWorkDefinition, etc.)
+- `tree-work.types.ts` - TreeWork-specific types that reference the TreeWork class
+
+**Note on circular dependencies:** Types that reference the `TreeWork` class (like `ExtractTreeAccumulated`, `WorksToRecord`) are in `tree-work.types.ts` using `import type` which TypeScript handles specially - it's erased at compile time, avoiding runtime circular dependencies.
+
+This policy ensures:
+
+- Single source of truth for type definitions
+- Easier navigation and maintenance
+- Clear separation between types and implementation
+
+### File Organization Policy (STRICT)
+
+**One class per file.** Each class should have its own dedicated file.
+
+- `work.ts` - `Work` class only
+- `tree-work.ts` - `TreeWork` class only
+
+**Error classes go in `src/errors/`.** All errors extend `WorkTreeError`:
+
+- `errors/base-error.ts` - `WorkTreeError` base class
+- `errors/timeout-error.ts` - `TimeoutError` (extends `WorkTreeError`)
+- `errors/index.ts` - Re-exports all errors
+
+**Helper functions go in `src/helpers/`.** Internal helper functions (not part of public API):
+
+- `helpers/sleep.ts` - Sleep utility
+- `helpers/retry.ts` - Retry normalization and delay calculation
+- `helpers/timeout.ts` - Timeout normalization and execution
+- `helpers/index.ts` - Re-exports all helpers
+
+**Utility functions go in `src/utils/`.** Public utility functions (exported in public API):
+
+- `utils/work-utils.ts` - Work-related utilities (`isTreeWorkDefinition`, `getWorkDefinition`)
+- `utils/index.ts` - Re-exports all utilities
+
 ## Project Structure
 
 ```
 src/
-├── index.ts            # Public exports
-├── type-guards.ts      # Type guard functions (isTreeWorkDefinition)
-├── work.ts             # Work and TreeWork classes
-├── work.types.ts       # All type definitions (WorkStatus, WorkResult, IWorkDefinition, etc.)
-├── work.test.ts        # Unit tests for Work class (Vitest)
+├── index.ts              # Public exports
+├── work.ts               # Work class (leaf work)
+├── tree-work.ts          # TreeWork class (tree work with serial/parallel)
+├── work.types.ts         # Core type definitions
+├── tree-work.types.ts    # TreeWork-specific types (uses import type)
 ├── work-results-map.ts   # Internal WorkResultsMap implementation
+├── errors/               # Error classes (exported)
+│   ├── index.ts          # Re-exports all errors
+│   ├── base-error.ts     # WorkTreeError base class
+│   └── timeout-error.ts  # TimeoutError
+├── helpers/              # Internal helper functions (not exported)
+│   ├── index.ts          # Re-exports all helpers
+│   ├── sleep.ts          # Sleep utility
+│   ├── retry.ts          # Retry helpers
+│   └── timeout.ts        # Timeout helpers
+├── utils/                # Public utility functions (exported)
+│   ├── index.ts          # Re-exports all utilities
+│   └── work-utils.ts     # Work-related utilities
+├── work.test.ts          # Unit tests for Work class (Vitest)
 └── tree-work.test.ts     # Unit tests for TreeWork (Vitest)
 ```
 
