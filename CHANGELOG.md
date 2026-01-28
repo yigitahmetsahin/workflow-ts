@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [6.3.0](https://github.com/yigitahmetsahin/work-tree/compare/v6.2.0...v6.3.0) (2026-01-28)
+
+
+### Features
+
+* add retry mechanism for failed works ([d55729e](https://github.com/yigitahmetsahin/work-tree/commit/d55729e0a8afa53155aabf7dcf7d387d79d19f5c))
+
 ## [6.2.0](https://github.com/yigitahmetsahin/work-tree/compare/v6.1.2...v6.2.0) (2026-01-28)
 
 
