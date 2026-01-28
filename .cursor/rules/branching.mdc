@@ -1,11 +1,11 @@
 ---
-description: Critical branching policy - ALWAYS create new branches from main
+description: Critical branching policy - ALWAYS start new branches from main
 alwaysApply: true
 ---
 
 # Branching Policy (CRITICAL)
 
-**ALWAYS create a NEW branch from `main` for EVERY change.**
+**ALWAYS start a NEW branch from `main` for EVERY change.**
 
 Before starting ANY work:
 

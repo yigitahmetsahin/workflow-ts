@@ -217,7 +217,7 @@ export type TreeWorkStep<
 /**
  * Definition of a tree work - contains nested works that execute as a unit.
  * Tree works have steps (serial/parallel) instead of execute.
- * Created using `Work.tree('treeName').addSerial(...).addParallel(...)`.
+ * Built using `Work.tree('treeName').addSerial(...).addParallel(...)`.
  */
 export interface ITreeWorkDefinition<
   TName extends string,
@@ -249,7 +249,7 @@ export type TreeWorkFactoryOptions<
 > = TreeRunOptions & WorkBehaviorOptions<TData, TAvailableWorkResults>;
 
 /**
- * Options for creating a tree work (internal, includes name)
+ * Options for building a tree work (internal, includes name)
  */
 export type TreeWorkOptions<
   TName extends string,
@@ -280,7 +280,7 @@ export interface IRunnableTreeWork<
 
 /**
  * Unique symbol brand for sealed tree works.
- * This creates a nominal type that cannot be accidentally satisfied.
+ * This produces a nominal type that cannot be accidentally satisfied.
  */
 declare const SEALED_BRAND: unique symbol;
 
@@ -302,7 +302,7 @@ export type SealedTreeWork<
 // ============================================================================
 
 /**
- * Helper type that only creates a record if the key is a literal string.
+ * Helper type that only produces a record if the key is a literal string.
  * If K is the wide 'string' type, returns empty object to avoid index signatures.
  * This prevents { [x: string]: unknown } from polluting accumulated types.
  */

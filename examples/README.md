@@ -78,7 +78,7 @@ if (userResult.status === WorkStatus.Completed) {
 
 The simplest possible example demonstrating:
 
-- Creating a tree with `Work.tree()`
+- Building a tree with `Work.tree()`
 - Adding serial steps
 - Accessing results from previous steps
 - Running and checking completion status

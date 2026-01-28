@@ -125,7 +125,7 @@ src/
 
 **Always use TDD when implementing new features or fixing bugs:**
 
-1. **Write tests first** - Create tests that define the expected behavior before writing implementation code
+1. **Write tests first** - Write tests that define the expected behavior before writing implementation code
 2. **Run tests to see them fail** - Verify the tests fail as expected (red phase)
 3. **Implement the feature** - Write the minimum code needed to make tests pass (green phase)
 4. **Refactor if needed** - Clean up the code while keeping tests passing (refactor phase)
@@ -194,10 +194,10 @@ This project uses **Release Please** bot for automated releases:
    - `feat!:` or `BREAKING CHANGE:` → major version bump
    - `docs:`, `chore:`, `refactor:` → no release
 
-2. Bot automatically creates/updates a release PR on each push to main
+2. Bot automatically opens/updates a release PR on each push to main
 
 3. Merging the release PR:
-   - Creates GitHub release with auto-generated changelog
+   - Generates GitHub release with auto-generated changelog
    - Publishes to npm with OIDC provenance
 
 ## Commit Message Format
@@ -366,7 +366,7 @@ Documentation, tests, and examples should be updated **in the same PR** as the c
 
 ## Branching Policy
 
-**CRITICAL: ALWAYS create a NEW branch from `main` for EVERY change.** Never reuse or add commits to an existing branch, even if it seems related. Each task/fix/feature gets its own fresh branch.
+**CRITICAL: ALWAYS start a NEW branch from `main` for EVERY change.** Never reuse or add commits to an existing branch, even if it seems related. Each task/fix/feature gets its own fresh branch.
 
 - **Each feature or fix requires a separate branch** - never push multiple unrelated changes to the same branch
 - **NEVER use an existing branch** - always run `git checkout main && git pull && git checkout -b <new-branch>` before starting any work
@@ -376,14 +376,14 @@ Documentation, tests, and examples should be updated **in the same PR** as the c
   - Refactors: `refactor/<short-description>`
   - Docs: `docs/<short-description>` (e.g., `docs/update-readme`)
 - **One PR per feature/fix** - do not combine unrelated changes in a single PR
-- Always create branches from the latest `main`
-- After a PR is merged, create a new branch for the next change - do not reuse merged branches
-- If you find yourself on an existing branch that isn't `main`, switch to `main` first before creating a new branch
+- Always start branches from the latest `main`
+- After a PR is merged, start a new branch for the next change - do not reuse merged branches
+- If you find yourself on an existing branch that isn't `main`, switch to `main` first before starting a new branch
 
 ## Important Notes
 
 - Do NOT manually bump version in `package.json` - Release Please handles this
-- Do NOT create tags manually - Release Please creates them
+- Do NOT make tags manually - Release Please handles them
 - The `dist/` folder is gitignored but included in npm package
 - npm publishing uses GitHub OIDC trusted publishing (no tokens needed)
 - **ALWAYS run `npm install` after adding/updating dependencies** to update `package-lock.json`

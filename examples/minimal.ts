@@ -4,7 +4,7 @@
 import { Work, WorkStatus } from '../src';
 
 async function main() {
-  // Create and run a simple 2-step tree
+  // Build and run a simple 2-step tree
   const result = await Work.tree('greeting')
     .addSerial({
       name: 'getName',

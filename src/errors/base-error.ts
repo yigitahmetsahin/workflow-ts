@@ -1,6 +1,6 @@
 /**
  * Base error class for all work-tree errors.
- * Extend this class to create custom errors for the library.
+ * Extend this class to define custom errors for the library.
  *
  * This allows consumers to catch all library errors with:
  * ```typescript

@@ -34,7 +34,7 @@ jobs:
       - name: Build
         run: npm run build
 
-  # Job 2: Release Please (creates/updates release PR)
+  # Job 2: Release Please (opens/updates release PR)
   release-please:
     needs: ci
     runs-on: ubuntu-latest
@@ -45,7 +45,7 @@ jobs:
       - uses: googleapis/release-please-action@v4
         id: release
 
-  # Job 3: Publish to npm (only if release was created)
+  # Job 3: Publish to npm (only if release was made)
   publish:
     needs: release-please
     if: needs.release-please.outputs.release_created

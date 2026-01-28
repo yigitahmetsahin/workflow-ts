@@ -28,7 +28,7 @@ import {
 
 /**
  * A tree work that contains nested serial/parallel steps.
- * Created using `Work.tree('treeName')`.
+ * Built using `Work.tree('treeName')`.
  *
  * Tree works execute their children in the order they were added:
  * - `addSerial(work)` adds a single work to execute in sequence

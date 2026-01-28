@@ -87,7 +87,7 @@ export class Work<
   }
 
   /**
-   * Create a tree work that can contain nested serial/parallel works.
+   * Build a tree work that can contain nested serial/parallel works.
    * Tree works don't have an execute function - they execute their children.
    *
    * @example

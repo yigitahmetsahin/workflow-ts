@@ -81,7 +81,7 @@ if (result.status === WorkStatus.Completed) {
 
 ### `Work.tree(name, options?)`
 
-Create a new tree work with a builder API for adding serial and parallel steps.
+Build a new tree work with a builder API for adding serial and parallel steps.
 
 ```typescript
 // Simple tree
