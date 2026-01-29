@@ -91,6 +91,8 @@ const tree = Work.tree('myTree');
 const tree = Work.tree('myTree', {
   failFast: true, // optional: stop on first error (default: true)
   shouldRun: (ctx) => true, // optional: skip entire tree
+  onBefore: (ctx) => {}, // optional: called before steps execute
+  onAfter: (ctx, outcome) => {}, // optional: called after completion
   onError: (error, ctx) => {}, // optional: handle tree-level errors
   onSkipped: (ctx) => {}, // optional: called when tree is skipped
   silenceError: false, // optional: continue on error
@@ -195,14 +197,16 @@ Each work can have the following properties:
 
 ```typescript
 {
-  name: 'workName',           // Required: unique name
-  execute: async (ctx) => {}, // Required: async function
-  shouldRun: (ctx) => true,   // Optional: skip condition
-  onError: (err, ctx) => {},  // Optional: error handler
-  onSkipped: (ctx) => {},     // Optional: called when skipped
-  silenceError: false,        // Optional: continue on error
-  retry: 3,                   // Optional: retry configuration
-  timeout: 5000,              // Optional: timeout in ms
+  name: 'workName',              // Required: unique name
+  execute: async (ctx) => {},    // Required: async function
+  shouldRun: (ctx) => true,      // Optional: skip condition
+  onBefore: (ctx) => {},         // Optional: called before execute (trees only)
+  onAfter: (ctx, outcome) => {}, // Optional: called after completion (trees only)
+  onError: (err, ctx) => {},     // Optional: error handler
+  onSkipped: (ctx) => {},        // Optional: called when skipped
+  silenceError: false,           // Optional: continue on error
+  retry: 3,                      // Optional: retry configuration
+  timeout: 5000,                 // Optional: timeout in ms
 }
 ```
 
@@ -288,6 +292,159 @@ tree.addSerial({
     // Useful for logging, cleanup, or triggering alternative actions
   },
 });
+```
+
+## Lifecycle Hooks
+
+Trees support `onBefore` and `onAfter` hooks for setup and cleanup operations.
+
+### Execution Flow
+
+```mermaid
+flowchart TD
+    A[run called] --> B{shouldRun?}
+    B -->|false| C[onSkipped]
+    B -->|true/undefined| D[onBefore]
+    D --> E[Execute steps]
+    E --> F{Success?}
+    F -->|yes| G["onAfter (Completed)"]
+    F -->|no| H{silenceError or onError handles?}
+    H -->|yes| I["onAfter (Failed, handled)"]
+    H -->|no| J["onAfter (Failed)"]
+    J --> K[Propagate error]
+```
+
+### `onBefore` Hook
+
+Called after `shouldRun` passes but before any steps execute:
+
+```typescript
+const tree = Work.tree('workflow', {
+  onBefore: async (ctx) => {
+    console.log('Starting workflow for user:', ctx.data.userId);
+    // Useful for logging, setup, acquiring resources, etc.
+  },
+}).addSerial({
+  name: 'step1',
+  execute: async () => 'result',
+});
+```
+
+If `onBefore` throws an error, the tree fails immediately and steps are not executed:
+
+```typescript
+const tree = Work.tree('guarded', {
+  onBefore: async (ctx) => {
+    if (!ctx.data.hasPermission) {
+      throw new Error('Permission denied');
+    }
+  },
+}).addSerial({
+  name: 'protectedStep',
+  execute: async () => 'secret data',
+});
+```
+
+### `onAfter` Hook
+
+Called after all steps complete (whether success or failure):
+
+```typescript
+const tree = Work.tree('workflow', {
+  onAfter: async (ctx, outcome) => {
+    // outcome: { status, result?, error?, workResults }
+    if (outcome.status === WorkStatus.Completed) {
+      console.log('Workflow completed with result:', outcome.result);
+    } else {
+      console.log('Workflow failed with error:', outcome.error?.message);
+    }
+    // Access any work result via outcome.workResults
+    const step1 = outcome.workResults.get('step1').result;
+  },
+}).addSerial({
+  name: 'step1',
+  execute: async () => 'result',
+});
+```
+
+### `setOnAfter` Method (Full Type Inference)
+
+For better type inference on `workResults`, use the `setOnAfter()` method after adding steps:
+
+```typescript
+const tree = Work.tree('workflow')
+  .addSerial({ name: 'step1', execute: async () => 'hello' })
+  .addSerial({ name: 'step2', execute: async () => 42 })
+  .setOnAfter(async (ctx, outcome) => {
+    // ✅ Full type inference for workResults!
+    const step1 = outcome.workResults.get('step1').result; // string
+    const step2 = outcome.workResults.get('step2').result; // number
+    console.log(`Step1: ${step1}, Step2: ${step2}`);
+  });
+```
+
+Important notes about `onAfter`:
+
+- **Not called** when tree is skipped (via `shouldRun`)
+- **Called** even when `onBefore` throws (try/finally semantics for safe cleanup)
+- **Called** even when steps fail (with error in outcome)
+- **Called** even when error is handled (via `silenceError` or `onError`)
+- Errors thrown in `onAfter` are silently ignored (don't affect tree result)
+
+This try/finally behavior makes `onAfter` safe for resource cleanup patterns like lock/unlock:
+
+```typescript
+const tree = Work.tree('withLock', {
+  onBefore: async () => {
+    await acquireLock();
+    // Even if something throws after this, onAfter will be called
+  },
+  onAfter: async () => {
+    await releaseLock(); // Always called for cleanup
+  },
+});
+```
+
+### Combining Hooks
+
+Use both hooks together for complete lifecycle management:
+
+```typescript
+const tree = Work.tree('transactional', {
+  onBefore: async (ctx) => {
+    console.log('Starting transaction...');
+    ctx.data.transaction = await startTransaction();
+  },
+  onAfter: async (ctx, outcome) => {
+    if (outcome.status === WorkStatus.Completed) {
+      await ctx.data.transaction.commit();
+      console.log('Transaction committed');
+    } else {
+      await ctx.data.transaction.rollback();
+      console.log('Transaction rolled back');
+    }
+  },
+})
+  .addSerial({ name: 'step1', execute: async () => 'a' })
+  .addSerial({ name: 'step2', execute: async () => 'b' });
+```
+
+### Nested Tree Hooks
+
+Each nested tree has its own hooks that are called during its execution:
+
+```typescript
+const innerTree = Work.tree('inner', {
+  onBefore: async () => console.log('Inner starting'),
+  onAfter: async () => console.log('Inner done'),
+}).addSerial({ name: 'innerStep', execute: async () => 'x' });
+
+const outerTree = Work.tree('outer', {
+  onBefore: async () => console.log('Outer starting'),
+  onAfter: async () => console.log('Outer done'),
+}).addSerial(innerTree);
+
+// Output order: "Outer starting" → "Inner starting" → "Inner done" → "Outer done"
 ```
 
 ## Error Handling
@@ -689,6 +846,7 @@ See the `examples/` folder for complete examples:
 - `basic.ts` - Simple serial execution
 - `parallel.ts` - Concurrent execution
 - `conditional.ts` - Skip steps with shouldRun
+- `lifecycle-hooks.ts` - onBefore/onAfter hooks for setup and cleanup
 - `error-handling.ts` - Error handling patterns
 - `retry.ts` - Retry mechanisms with backoff
 - `timeout.ts` - Timeout configuration and handling

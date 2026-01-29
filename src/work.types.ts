@@ -143,6 +143,20 @@ export type TimeoutConfig<
 > = number | TimeoutOptions<TData, TAvailableWorkResults>;
 
 /**
+ * Outcome passed to onAfter hook
+ */
+export type WorkOutcome<TWorkResults extends Record<string, unknown> = Record<string, unknown>> = {
+  /** Status of the work execution */
+  status: WorkStatus;
+  /** Result value (if completed successfully) - use workResults for typed access */
+  result?: unknown;
+  /** Error (if failed) */
+  error?: Error;
+  /** Fully typed access to all work results */
+  workResults: IWorkResultsMap<TWorkResults>;
+};
+
+/**
  * Common behavior options for works and trees (shouldRun, onError, onSkipped, silenceError, retry, timeout)
  */
 export type WorkBehaviorOptions<
@@ -153,6 +167,16 @@ export type WorkBehaviorOptions<
   shouldRun?: (
     context: WorkflowContext<TData, TAvailableWorkResults>
   ) => boolean | Promise<boolean>;
+  /** Optional: called before work/tree execution starts (after shouldRun passes) */
+  onBefore?: (context: WorkflowContext<TData, TAvailableWorkResults>) => void | Promise<void>;
+  /**
+   * Optional: called after work/tree execution completes (success or failure)
+   * Note: For full type inference of workResults, use the .onAfter() method instead
+   */
+  onAfter?: (
+    context: WorkflowContext<TData, TAvailableWorkResults>,
+    outcome: WorkOutcome<TAvailableWorkResults>
+  ) => void | Promise<void>;
   /** Optional: called when work fails */
   onError?: (
     error: Error,

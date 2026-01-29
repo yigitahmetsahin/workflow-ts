@@ -1949,4 +1949,498 @@ describe('TreeWork.run()', () => {
       expect(result.error?.message).toBe('Work "errorInCallback" timed out after 30ms');
     });
   });
+
+  describe('onBefore and onAfter hooks', () => {
+    describe('onBefore hook', () => {
+      it('should call onBefore before steps execute', async () => {
+        const executionOrder: string[] = [];
+
+        const tree = Work.tree('tree', {
+          onBefore: async () => {
+            executionOrder.push('onBefore');
+          },
+        }).addSerial({
+          name: 'step1',
+          execute: async () => {
+            executionOrder.push('step1');
+            return 'done';
+          },
+        });
+
+        await tree.run({});
+
+        expect(executionOrder).toEqual(['onBefore', 'step1']);
+      });
+
+      it('should not call onBefore when shouldRun returns false', async () => {
+        const onBeforeFn = vi.fn();
+
+        const tree = Work.tree('tree', {
+          shouldRun: () => false,
+          onBefore: onBeforeFn,
+        }).addSerial({
+          name: 'step1',
+          execute: async () => 'done',
+        });
+
+        await tree.run({});
+
+        expect(onBeforeFn).not.toHaveBeenCalled();
+      });
+
+      it('should pass context to onBefore', async () => {
+        const onBeforeFn = vi.fn();
+
+        const tree = Work.tree('tree', {
+          onBefore: onBeforeFn,
+        }).addSerial({
+          name: 'step1',
+          execute: async () => 'done',
+        });
+
+        await tree.run({ userId: '123' });
+
+        expect(onBeforeFn).toHaveBeenCalledTimes(1);
+        expect(onBeforeFn.mock.calls[0][0].data).toEqual({ userId: '123' });
+      });
+
+      it('should fail the tree when onBefore throws', async () => {
+        const tree = Work.tree('tree', {
+          onBefore: async () => {
+            throw new Error('onBefore failed');
+          },
+        }).addSerial({
+          name: 'step1',
+          execute: async () => 'should not run',
+        });
+
+        const result = await tree.run({});
+
+        expect(result.status).toBe(WorkStatus.Failed);
+        expect(result.error?.message).toBe('onBefore failed');
+        expect(result.workResults.has('step1')).toBe(false);
+      });
+
+      it('should support async onBefore', async () => {
+        let onBeforeCompleted = false;
+
+        const tree = Work.tree('tree', {
+          onBefore: async () => {
+            await new Promise((r) => setTimeout(r, 10));
+            onBeforeCompleted = true;
+          },
+        }).addSerial({
+          name: 'step1',
+          execute: async () => {
+            // onBefore should have completed by now
+            return onBeforeCompleted ? 'success' : 'failure';
+          },
+        });
+
+        const result = await tree.run({});
+
+        expect(result.status).toBe(WorkStatus.Completed);
+        expect(result.context.workResults.get('step1')?.result).toBe('success');
+      });
+
+      it('should call onBefore for nested trees', async () => {
+        const executionOrder: string[] = [];
+
+        const innerTree = Work.tree('inner', {
+          onBefore: async () => {
+            executionOrder.push('inner-onBefore');
+          },
+        }).addSerial({
+          name: 'innerStep',
+          execute: async () => {
+            executionOrder.push('innerStep');
+            return 'a';
+          },
+        });
+
+        const outerTree = Work.tree('outer', {
+          onBefore: async () => {
+            executionOrder.push('outer-onBefore');
+          },
+        }).addSerial(innerTree);
+
+        await outerTree.run({});
+
+        expect(executionOrder).toEqual(['outer-onBefore', 'inner-onBefore', 'innerStep']);
+      });
+    });
+
+    describe('onAfter hook', () => {
+      it('should call onAfter after successful execution', async () => {
+        const executionOrder: string[] = [];
+
+        const tree = Work.tree('tree', {
+          onAfter: async () => {
+            executionOrder.push('onAfter');
+          },
+        }).addSerial({
+          name: 'step1',
+          execute: async () => {
+            executionOrder.push('step1');
+            return 'done';
+          },
+        });
+
+        await tree.run({});
+
+        expect(executionOrder).toEqual(['step1', 'onAfter']);
+      });
+
+      it('should call onAfter with Completed status on success', async () => {
+        const onAfterFn = vi.fn();
+
+        const tree = Work.tree('tree', {
+          onAfter: onAfterFn,
+        }).addSerial({
+          name: 'step1',
+          execute: async () => 'result',
+        });
+
+        await tree.run({});
+
+        expect(onAfterFn).toHaveBeenCalledTimes(1);
+        expect(onAfterFn.mock.calls[0][1]).toMatchObject({
+          status: WorkStatus.Completed,
+          result: 'result',
+        });
+      });
+
+      it('should call onAfter with Failed status on error', async () => {
+        const onAfterFn = vi.fn();
+
+        const tree = Work.tree('tree', {
+          onAfter: onAfterFn,
+        }).addSerial({
+          name: 'step1',
+          execute: async () => {
+            throw new Error('step failed');
+          },
+        });
+
+        await tree.run({});
+
+        expect(onAfterFn).toHaveBeenCalledTimes(1);
+        expect(onAfterFn.mock.calls[0][1].status).toBe(WorkStatus.Failed);
+        expect(onAfterFn.mock.calls[0][1].error?.message).toBe('step failed');
+      });
+
+      it('should not call onAfter when tree is skipped', async () => {
+        const onAfterFn = vi.fn();
+
+        const tree = Work.tree('tree', {
+          shouldRun: () => false,
+          onAfter: onAfterFn,
+        }).addSerial({
+          name: 'step1',
+          execute: async () => 'done',
+        });
+
+        await tree.run({});
+
+        expect(onAfterFn).not.toHaveBeenCalled();
+      });
+
+      it('should pass context to onAfter', async () => {
+        const onAfterFn = vi.fn();
+
+        const tree = Work.tree('tree', {
+          onAfter: onAfterFn,
+        }).addSerial({
+          name: 'step1',
+          execute: async () => 'done',
+        });
+
+        await tree.run({ userId: '456' });
+
+        expect(onAfterFn).toHaveBeenCalledTimes(1);
+        expect(onAfterFn.mock.calls[0][0].data).toEqual({ userId: '456' });
+      });
+
+      it('should not change tree result when onAfter throws', async () => {
+        const tree = Work.tree('tree', {
+          onAfter: async () => {
+            throw new Error('onAfter failed');
+          },
+        }).addSerial({
+          name: 'step1',
+          execute: async () => 'success',
+        });
+
+        const result = await tree.run({});
+
+        // Tree should still be Completed despite onAfter error
+        expect(result.status).toBe(WorkStatus.Completed);
+        expect(result.context.workResults.get('step1')?.result).toBe('success');
+      });
+
+      it('should call onAfter even when silenceError handles failure', async () => {
+        const onAfterFn = vi.fn();
+
+        const innerTree = Work.tree('inner', {
+          silenceError: true,
+          onAfter: onAfterFn,
+        }).addSerial({
+          name: 'willFail',
+          execute: async () => {
+            throw new Error('Inner failure');
+          },
+        });
+
+        const outerTree = Work.tree('outer').addSerial(innerTree);
+
+        await outerTree.run({});
+
+        expect(onAfterFn).toHaveBeenCalledTimes(1);
+        expect(onAfterFn.mock.calls[0][1].status).toBe(WorkStatus.Failed);
+      });
+
+      it('should call onAfter even when onError handles failure', async () => {
+        const onAfterFn = vi.fn();
+
+        const tree = Work.tree('tree', {
+          onError: async () => {
+            // Swallow error
+          },
+          onAfter: onAfterFn,
+        }).addSerial({
+          name: 'willFail',
+          execute: async () => {
+            throw new Error('Handled failure');
+          },
+        });
+
+        const outerTree = Work.tree('outer').addSerial(tree);
+
+        await outerTree.run({});
+
+        expect(onAfterFn).toHaveBeenCalledTimes(1);
+        expect(onAfterFn.mock.calls[0][1].status).toBe(WorkStatus.Failed);
+      });
+
+      it('should support async onAfter', async () => {
+        let onAfterCompleted = false;
+
+        const tree = Work.tree('tree', {
+          onAfter: async () => {
+            await new Promise((r) => setTimeout(r, 10));
+            onAfterCompleted = true;
+          },
+        }).addSerial({
+          name: 'step1',
+          execute: async () => 'done',
+        });
+
+        await tree.run({});
+
+        expect(onAfterCompleted).toBe(true);
+      });
+
+      it('should call onAfter for nested trees', async () => {
+        const executionOrder: string[] = [];
+
+        const innerTree = Work.tree('inner', {
+          onAfter: async () => {
+            executionOrder.push('inner-onAfter');
+          },
+        }).addSerial({
+          name: 'innerStep',
+          execute: async () => {
+            executionOrder.push('innerStep');
+            return 'a';
+          },
+        });
+
+        const outerTree = Work.tree('outer', {
+          onAfter: async () => {
+            executionOrder.push('outer-onAfter');
+          },
+        }).addSerial(innerTree);
+
+        await outerTree.run({});
+
+        expect(executionOrder).toEqual(['innerStep', 'inner-onAfter', 'outer-onAfter']);
+      });
+    });
+
+    describe('setOnAfter method', () => {
+      it('should provide typed workResults in outcome via setOnAfter', async () => {
+        const onAfterFn = vi.fn();
+
+        const tree = Work.tree('tree')
+          .addSerial({
+            name: 'step1',
+            execute: async () => 'hello',
+          })
+          .addSerial({
+            name: 'step2',
+            execute: async () => 42,
+          })
+          .setOnAfter(async (ctx, outcome) => {
+            // Access workResults with full typing
+            const step1 = outcome.workResults.get('step1').result;
+            const step2 = outcome.workResults.get('step2').result;
+            onAfterFn({ step1, step2, status: outcome.status });
+          });
+
+        await tree.run({});
+
+        expect(onAfterFn).toHaveBeenCalledWith({
+          step1: 'hello',
+          step2: 42,
+          status: WorkStatus.Completed,
+        });
+      });
+
+      it('should override option-based onAfter when setOnAfter is used', async () => {
+        const optionOnAfter = vi.fn();
+        const methodOnAfter = vi.fn();
+
+        const tree = Work.tree('tree', {
+          onAfter: optionOnAfter,
+        })
+          .addSerial({ name: 'step1', execute: async () => 'done' })
+          .setOnAfter(methodOnAfter);
+
+        await tree.run({});
+
+        expect(optionOnAfter).not.toHaveBeenCalled();
+        expect(methodOnAfter).toHaveBeenCalledTimes(1);
+      });
+
+      it('should call setOnAfter on failure with error in outcome', async () => {
+        const onAfterFn = vi.fn();
+
+        const tree = Work.tree('tree')
+          .addSerial({
+            name: 'step1',
+            execute: async () => {
+              throw new Error('step failed');
+            },
+          })
+          .setOnAfter(onAfterFn);
+
+        await tree.run({});
+
+        expect(onAfterFn).toHaveBeenCalledTimes(1);
+        expect(onAfterFn.mock.calls[0][1].status).toBe(WorkStatus.Failed);
+        expect(onAfterFn.mock.calls[0][1].error?.message).toBe('step failed');
+        expect(onAfterFn.mock.calls[0][1].workResults).toBeDefined();
+      });
+
+      it('should include workResults in outcome for option-based onAfter too', async () => {
+        const onAfterFn = vi.fn();
+
+        const tree = Work.tree('tree', {
+          onAfter: onAfterFn,
+        }).addSerial({
+          name: 'step1',
+          execute: async () => 'result',
+        });
+
+        await tree.run({});
+
+        expect(onAfterFn).toHaveBeenCalledTimes(1);
+        expect(onAfterFn.mock.calls[0][1].workResults).toBeDefined();
+        expect(onAfterFn.mock.calls[0][1].workResults.get('step1').result).toBe('result');
+      });
+
+      it('should allow chaining after setOnAfter', async () => {
+        const tree = Work.tree('tree')
+          .addSerial({ name: 'step1', execute: async () => 'a' })
+          .setOnAfter(async () => {})
+          .addSerial({ name: 'step2', execute: async () => 'b' });
+
+        const result = await tree.run({});
+
+        expect(result.status).toBe(WorkStatus.Completed);
+        expect(result.context.workResults.get('step1')?.result).toBe('a');
+        expect(result.context.workResults.get('step2')?.result).toBe('b');
+      });
+    });
+
+    describe('onBefore and onAfter together', () => {
+      it('should call both hooks in correct order', async () => {
+        const executionOrder: string[] = [];
+
+        const tree = Work.tree('tree', {
+          onBefore: async () => {
+            executionOrder.push('onBefore');
+          },
+          onAfter: async () => {
+            executionOrder.push('onAfter');
+          },
+        }).addSerial({
+          name: 'step1',
+          execute: async () => {
+            executionOrder.push('step1');
+            return 'done';
+          },
+        });
+
+        await tree.run({});
+
+        expect(executionOrder).toEqual(['onBefore', 'step1', 'onAfter']);
+      });
+
+      it('should call onAfter when onBefore fails (try/finally semantics)', async () => {
+        const onAfterFn = vi.fn();
+
+        const tree = Work.tree('tree', {
+          onBefore: async () => {
+            throw new Error('onBefore failed');
+          },
+          onAfter: onAfterFn,
+        }).addSerial({
+          name: 'step1',
+          execute: async () => 'done',
+        });
+
+        const result = await tree.run({});
+
+        // onAfter IS called even when onBefore fails (for safe cleanup like releasing locks)
+        expect(onAfterFn).toHaveBeenCalledTimes(1);
+        expect(onAfterFn.mock.calls[0][1].status).toBe(WorkStatus.Failed);
+        expect(onAfterFn.mock.calls[0][1].error?.message).toBe('onBefore failed');
+        expect(result.status).toBe(WorkStatus.Failed);
+      });
+
+      it('should call onAfter with error from failed step', async () => {
+        const executionOrder: string[] = [];
+        const onAfterFn = vi.fn();
+
+        const tree = Work.tree('tree', {
+          onBefore: async () => {
+            executionOrder.push('onBefore');
+          },
+          onAfter: onAfterFn,
+        })
+          .addSerial({
+            name: 'step1',
+            execute: async () => {
+              executionOrder.push('step1');
+              return 'a';
+            },
+          })
+          .addSerial({
+            name: 'step2',
+            execute: async () => {
+              executionOrder.push('step2');
+              throw new Error('step2 failed');
+            },
+          });
+
+        await tree.run({});
+
+        expect(executionOrder).toEqual(['onBefore', 'step1', 'step2']);
+        expect(onAfterFn).toHaveBeenCalledTimes(1);
+        expect(onAfterFn.mock.calls[0][1].status).toBe(WorkStatus.Failed);
+        expect(onAfterFn.mock.calls[0][1].error?.message).toBe('step2 failed');
+      });
+    });
+  });
 });

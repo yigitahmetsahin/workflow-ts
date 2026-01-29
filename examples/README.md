@@ -11,6 +11,7 @@ npx tsx examples/minimal.ts
 npx tsx examples/basic.ts
 npx tsx examples/parallel.ts
 npx tsx examples/conditional.ts
+npx tsx examples/lifecycle-hooks.ts
 npx tsx examples/error-handling.ts
 npx tsx examples/retry.ts
 npx tsx examples/timeout.ts
@@ -108,7 +109,18 @@ Skip-based execution demonstrating:
 - Dynamic execution paths based on input
 - Multiple scenarios with same tree
 
-### 4. Error Handling (`error-handling.ts`)
+### 4. Lifecycle Hooks (`lifecycle-hooks.ts`)
+
+Lifecycle hooks demonstrating:
+
+- `onBefore` hook for setup before execution
+- `onAfter` hook for cleanup after completion (success or failure)
+- `setOnAfter()` method for full type inference on `workResults`
+- Nested trees with their own hooks
+- Transaction-like patterns (setup/commit/rollback)
+- Conditional skip behavior (onAfter not called when skipped)
+
+### 5. Error Handling (`error-handling.ts`)
 
 Error handling demonstrating:
 
@@ -119,7 +131,7 @@ Error handling demonstrating:
 - Using `WorkTreeError` base class to catch all library errors
 - Using `TimeoutError` for type-safe timeout handling
 
-### 5. Retry (`retry.ts`)
+### 6. Retry (`retry.ts`)
 
 Retry mechanisms demonstrating:
 
@@ -131,7 +143,7 @@ Retry mechanisms demonstrating:
 - Combining retry with `silenceError` for non-critical work
 - Tracking attempts via `WorkResult.attempts`
 
-### 6. Timeout (`timeout.ts`)
+### 7. Timeout (`timeout.ts`)
 
 Timeout mechanisms demonstrating:
 
@@ -144,7 +156,7 @@ Timeout mechanisms demonstrating:
 - Parallel works with individual timeouts
 - Using `TimeoutError` class for type-safe error handling
 
-### 7. Work Class (`work-class.ts`)
+### 8. Work Class (`work-class.ts`)
 
 Standalone work definitions demonstrating:
 
@@ -154,7 +166,7 @@ Standalone work definitions demonstrating:
 - Reusing the same Work across multiple trees
 - Conditional execution with Work class
 
-### 8. Tree Work (`tree-work.ts`)
+### 9. Tree Work (`tree-work.ts`)
 
 Nested tree-like structures demonstrating:
 
@@ -165,7 +177,7 @@ Nested tree-like structures demonstrating:
 - Parent tracking for nested works
 - Tree-level `shouldRun`, `onError`, and `silenceError`
 
-### 9. Sealed (`sealed.ts`)
+### 10. Sealed (`sealed.ts`)
 
 Sealing trees to prevent modifications:
 

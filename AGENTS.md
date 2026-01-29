@@ -307,10 +307,42 @@ const conditionalTree = Work.tree('conditional', {
   failFast: true, // Stop on first error (default: true)
   shouldRun: (ctx) => ctx.data.isEnabled, // Skip entire tree
   silenceError: true, // Don't fail parent on error
+  onBefore: (ctx) => console.log('Starting tree...'), // Called before steps
+  onAfter: (ctx, outcome) => console.log(`Done: ${outcome.status}`), // Called after completion
   onError: (error, ctx) => {}, // Handle tree errors
   onSkipped: (ctx) => {}, // Called when tree is skipped
   timeout: 60000, // Timeout entire tree after 60 seconds
 }).addSerial({ name: 'work', execute: async () => 'result' });
+
+// Lifecycle hooks with full example
+const treeWithHooks = Work.tree('withHooks', {
+  onBefore: async (ctx) => {
+    // Called after shouldRun passes, before steps execute
+    console.log('Tree starting with data:', ctx.data);
+  },
+  onAfter: async (ctx, outcome) => {
+    // Called after steps complete (success or failure)
+    // outcome: { status, result?, error?, workResults }
+    if (outcome.status === WorkStatus.Completed) {
+      console.log('Tree completed with result:', outcome.result);
+    } else {
+      console.log('Tree failed with error:', outcome.error?.message);
+    }
+  },
+})
+  .addSerial({ name: 'step1', execute: async () => 'a' })
+  .addSerial({ name: 'step2', execute: async () => 'b' });
+
+// For full type inference on workResults, use setOnAfter() method
+const treeWithTypedOnAfter = Work.tree('typed')
+  .addSerial({ name: 'fetchUser', execute: async () => ({ id: 1, name: 'John' }) })
+  .addSerial({ name: 'fetchOrders', execute: async () => [{ orderId: 100 }] })
+  .setOnAfter(async (ctx, outcome) => {
+    // ✅ Full type inference!
+    const user = outcome.workResults.get('fetchUser').result; // { id: number, name: string }
+    const orders = outcome.workResults.get('fetchOrders').result; // Array<{ orderId: number }>
+    console.log(`User ${user?.name} has ${orders?.length} orders`);
+  });
 
 // Seal tree to prevent modifications
 const sealed = tree.seal();

@@ -14,6 +14,7 @@ import {
   TimeoutConfig,
   MaybeRecord,
   ParallelWorkInput,
+  WorkOutcome,
 } from './work.types';
 import type { WorksToRecord } from './tree-work.types';
 import { WorkResultsMap } from './work-results-map';
@@ -83,6 +84,29 @@ export class TreeWork<
   /** Optional: condition to determine if tree work should run */
   readonly shouldRun?: (context: WorkflowContext<TData, TBase>) => boolean | Promise<boolean>;
 
+  /** Optional: called before tree work execution starts (after shouldRun passes) */
+  readonly onBefore?: (context: WorkflowContext<TData, TBase>) => void | Promise<void>;
+
+  /**
+   * Optional: called after tree work execution completes (success or failure)
+   * Note: This uses TBase types only. For full type inference, use the .onAfter() method.
+   */
+  readonly onAfter?: (
+    context: WorkflowContext<TData, TBase>,
+    outcome: WorkOutcome<TBase>
+  ) => void | Promise<void>;
+
+  /**
+   * Internal: stores the onAfter callback set via the .onAfter() method
+   * This version has access to the full accumulated types.
+   */
+  private _onAfterMethod?: (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    context: WorkflowContext<TData, any>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    outcome: WorkOutcome<any>
+  ) => void | Promise<void>;
+
   /** Optional: called when tree work fails */
   readonly onError?: (error: Error, context: WorkflowContext<TData, TBase>) => void | Promise<void>;
 
@@ -98,6 +122,8 @@ export class TreeWork<
   constructor(options: TreeWorkOptions<TName, TData, TBase>) {
     this.name = options.name;
     this.shouldRun = options.shouldRun;
+    this.onBefore = options.onBefore;
+    this.onAfter = options.onAfter;
     this.onError = options.onError;
     this.onSkipped = options.onSkipped;
     this.silenceError = options.silenceError;
@@ -283,6 +309,36 @@ export class TreeWork<
   }
 
   /**
+   * Set the onAfter hook with full type inference for accumulated work results.
+   * This method version provides better type inference than the constructor option.
+   *
+   * @param callback - Called after tree execution completes (success or failure)
+   * @returns this for chaining
+   *
+   * @example
+   * ```typescript
+   * const tree = Work.tree('myTree')
+   *   .addSerial({ name: 'step1', execute: async () => 'hello' })
+   *   .addSerial({ name: 'step2', execute: async () => 42 })
+   *   .onAfter(async (ctx, outcome) => {
+   *     // ✅ Full type inference!
+   *     const step1 = outcome.workResults.get('step1').result; // string
+   *     const step2 = outcome.workResults.get('step2').result; // number
+   *     console.log(`Completed with status: ${outcome.status}`);
+   *   });
+   * ```
+   */
+  setOnAfter(
+    callback: (
+      context: WorkflowContext<TData, TBase & TAccumulated>,
+      outcome: WorkOutcome<TBase & TAccumulated>
+    ) => void | Promise<void>
+  ): this {
+    this._onAfterMethod = callback;
+    return this;
+  }
+
+  /**
    * Execute the tree work with the given data.
    *
    * @param data - The initial data to pass to the tree
@@ -395,7 +451,46 @@ export class TreeWork<
         if (tree.onSkipped) {
           await tree.onSkipped(context);
         }
+        // Note: onAfter is NOT called when tree is skipped
         return { name: tree.name, skipped: true };
+      }
+    }
+
+    // Call onBefore hook if provided (after shouldRun passes)
+    if (tree.onBefore) {
+      try {
+        await tree.onBefore(context);
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        const duration = Date.now() - treeStartTime;
+
+        const failedResult: WorkResult = {
+          status: WorkStatus.Failed,
+          error: err,
+          duration,
+          parent: parentName,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        context.workResults.set(tree.name as any, failedResult as any);
+        workResults.set(tree.name, failedResult);
+
+        // Call onAfter even when onBefore fails (try/finally semantics for safe cleanup)
+        const onAfterCallback =
+          tree === this && this._onAfterMethod ? this._onAfterMethod : tree.onAfter;
+        if (onAfterCallback) {
+          try {
+            const outcome: WorkOutcome<TBase & TAccumulated> = {
+              status: WorkStatus.Failed,
+              error: err,
+              workResults: context.workResults,
+            };
+            await onAfterCallback(context, outcome);
+          } catch {
+            // onAfter errors are silently ignored
+          }
+        }
+
+        return { name: tree.name, error: err };
       }
     }
 
@@ -427,6 +522,23 @@ export class TreeWork<
       context.workResults.set(tree.name as any, completedResult as any);
       workResults.set(tree.name, completedResult);
 
+      // Call onAfter hook if provided (on success)
+      // Use method-based callback if set (for this tree), otherwise use option-based
+      const onAfterCallback =
+        tree === this && this._onAfterMethod ? this._onAfterMethod : tree.onAfter;
+      if (onAfterCallback) {
+        try {
+          const outcome: WorkOutcome<TBase & TAccumulated> = {
+            status: WorkStatus.Completed,
+            result: lastResult,
+            workResults: context.workResults,
+          };
+          await onAfterCallback(context, outcome);
+        } catch {
+          // onAfter errors are silently ignored - they don't affect tree result
+        }
+      }
+
       return { name: tree.name, result: lastResult };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -441,6 +553,23 @@ export class TreeWork<
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       context.workResults.set(tree.name as any, failedResult as any);
       workResults.set(tree.name, failedResult);
+
+      // Call onAfter hook if provided (on failure, before error handling)
+      // Use method-based callback if set (for this tree), otherwise use option-based
+      const onAfterCallback =
+        tree === this && this._onAfterMethod ? this._onAfterMethod : tree.onAfter;
+      if (onAfterCallback) {
+        try {
+          const outcome: WorkOutcome<TBase & TAccumulated> = {
+            status: WorkStatus.Failed,
+            error: err,
+            workResults: context.workResults,
+          };
+          await onAfterCallback(context, outcome);
+        } catch {
+          // onAfter errors are silently ignored - they don't affect tree result
+        }
+      }
 
       if (tree.silenceError) {
         return { name: tree.name, handled: true };
