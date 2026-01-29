@@ -669,8 +669,73 @@ export class TreeWork<
           if (workDef.onSkipped) {
             await workDef.onSkipped(context);
           }
+          // Note: onBefore and onAfter are NOT called when work is skipped
           return { name: workDef.name, skipped: true };
         }
+      }
+
+      // Helper to call onAfter hook safely (silences errors)
+      const callOnAfter = async (status: WorkStatus, result?: unknown, error?: Error) => {
+        if (workDef.onAfter) {
+          try {
+            const outcome: WorkOutcome = {
+              status,
+              result,
+              error,
+              workResults: context.workResults,
+            };
+            await workDef.onAfter(context, outcome);
+          } catch {
+            // onAfter errors are silently ignored
+          }
+        }
+      };
+
+      // Call onBefore hook if provided (after shouldRun passes)
+      let onBeforeFailed = false;
+      let onBeforeError: Error | null = null;
+      if (workDef.onBefore) {
+        try {
+          await workDef.onBefore(context);
+        } catch (error) {
+          onBeforeFailed = true;
+          onBeforeError = error instanceof Error ? error : new Error(String(error));
+        }
+      }
+
+      // If onBefore failed, don't execute but still call onAfter (try/finally semantics)
+      if (onBeforeFailed) {
+        const err = onBeforeError!;
+        const duration = Date.now() - workStartTime;
+
+        const failedResult: WorkResult = {
+          status: WorkStatus.Failed,
+          error: err,
+          duration,
+          parent: parentName,
+          attempts: 1,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        context.workResults.set(workDef.name as any, failedResult as any);
+        workResults.set(workDef.name, failedResult);
+
+        // Call onAfter even when onBefore fails (try/finally semantics)
+        await callOnAfter(WorkStatus.Failed, undefined, err);
+
+        if (workDef.silenceError) {
+          return { name: workDef.name, handled: true };
+        }
+
+        if (workDef.onError) {
+          try {
+            await workDef.onError(err, context);
+            return { name: workDef.name, handled: true };
+          } catch {
+            return { name: workDef.name, error: err };
+          }
+        }
+
+        return { name: workDef.name, error: err };
       }
 
       // Retry logic for parallel works
@@ -700,6 +765,10 @@ export class TreeWork<
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           context.workResults.set(workDef.name as any, completedResult as any);
           workResults.set(workDef.name, completedResult);
+
+          // Call onAfter on success
+          await callOnAfter(WorkStatus.Completed, result, undefined);
+
           return { name: workDef.name, result };
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error));
@@ -743,6 +812,9 @@ export class TreeWork<
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       context.workResults.set(workDef.name as any, failedResult as any);
       workResults.set(workDef.name, failedResult);
+
+      // Call onAfter on failure
+      await callOnAfter(WorkStatus.Failed, undefined, err);
 
       if (workDef.silenceError) {
         return { name: workDef.name, handled: true };
@@ -810,8 +882,67 @@ export class TreeWork<
         if (work.onSkipped) {
           await work.onSkipped(context);
         }
+        // Note: onBefore and onAfter are NOT called when work is skipped
         return;
       }
+    }
+
+    // Helper to call onAfter hook safely (silences errors)
+    const callOnAfter = async (status: WorkStatus, result?: unknown, error?: Error) => {
+      if (work.onAfter) {
+        try {
+          const outcome: WorkOutcome = {
+            status,
+            result,
+            error,
+            workResults: context.workResults,
+          };
+          await work.onAfter(context, outcome);
+        } catch {
+          // onAfter errors are silently ignored
+        }
+      }
+    };
+
+    // Call onBefore hook if provided (after shouldRun passes)
+    let onBeforeFailed = false;
+    let onBeforeError: Error | null = null;
+    if (work.onBefore) {
+      try {
+        await work.onBefore(context);
+      } catch (error) {
+        onBeforeFailed = true;
+        onBeforeError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+
+    // If onBefore failed, don't execute but still call onAfter (try/finally semantics)
+    if (onBeforeFailed) {
+      const err = onBeforeError!;
+      const failedResult: WorkResult = {
+        status: WorkStatus.Failed,
+        error: err,
+        duration: Date.now() - workStartTime,
+        parent: parentName,
+        attempts: 1,
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      context.workResults.set(work.name as any, failedResult as any);
+      workResults.set(work.name, failedResult);
+
+      // Call onAfter even when onBefore fails (try/finally semantics)
+      await callOnAfter(WorkStatus.Failed, undefined, err);
+
+      if (work.silenceError) {
+        return;
+      }
+
+      if (work.onError) {
+        await work.onError(err, context);
+        return;
+      }
+
+      throw err;
     }
 
     const retryOptions = normalizeRetryConfig(work.retry);
@@ -840,6 +971,10 @@ export class TreeWork<
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         context.workResults.set(work.name as any, completedResult as any);
         workResults.set(work.name, completedResult);
+
+        // Call onAfter on success
+        await callOnAfter(WorkStatus.Completed, result, undefined);
+
         return;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
@@ -881,6 +1016,9 @@ export class TreeWork<
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     context.workResults.set(work.name as any, failedResult as any);
     workResults.set(work.name, failedResult);
+
+    // Call onAfter on failure
+    await callOnAfter(WorkStatus.Failed, undefined, err);
 
     if (work.silenceError) {
       return;

@@ -4,6 +4,7 @@ import {
   WorkflowContext,
   RetryConfig,
   TimeoutConfig,
+  WorkOutcome,
 } from './work.types';
 import { TreeWork } from './tree-work';
 
@@ -55,6 +56,17 @@ export class Work<
     context: WorkflowContext<TData, TAvailableWorkResults>
   ) => boolean | Promise<boolean>;
 
+  /** Optional: called before work execution starts (after shouldRun passes) */
+  readonly onBefore?: (
+    context: WorkflowContext<TData, TAvailableWorkResults>
+  ) => void | Promise<void>;
+
+  /** Optional: called after work execution completes (success or failure) */
+  readonly onAfter?: (
+    context: WorkflowContext<TData, TAvailableWorkResults>,
+    outcome: WorkOutcome<TAvailableWorkResults>
+  ) => void | Promise<void>;
+
   /** Optional: called when work fails */
   readonly onError?: (
     error: Error,
@@ -79,6 +91,8 @@ export class Work<
     this.name = definition.name;
     this.execute = definition.execute;
     this.shouldRun = definition.shouldRun;
+    this.onBefore = definition.onBefore;
+    this.onAfter = definition.onAfter;
     this.onError = definition.onError;
     this.onSkipped = definition.onSkipped;
     this.silenceError = definition.silenceError;

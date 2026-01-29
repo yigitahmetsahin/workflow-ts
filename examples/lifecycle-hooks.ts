@@ -1,13 +1,38 @@
 /**
- * Lifecycle Hooks example - onBefore and onAfter hooks for trees
+ * Lifecycle Hooks example - onBefore and onAfter hooks for trees and works
  * Demonstrates setup/cleanup patterns, logging, and typed workResults access
  */
 import { Work, WorkStatus } from '../src';
 
 async function main() {
-  console.log('=== Example 1: Basic onBefore and onAfter ===\n');
+  console.log('=== Example 1: Work-level onBefore and onAfter ===\n');
 
-  const basicTree = Work.tree('basicWorkflow', {
+  // Individual Work instances can have their own lifecycle hooks
+  const workWithHooks = new Work({
+    name: 'workWithHooks',
+    onBefore: async (ctx) => {
+      console.log(`[Work onBefore] Starting work with data: ${JSON.stringify(ctx.data)}`);
+    },
+    execute: async (ctx) => {
+      console.log('  Executing work...');
+      return `Hello, ${ctx.data.name}!`;
+    },
+    onAfter: async (_ctx, outcome) => {
+      console.log(`[Work onAfter] Work finished with status: ${outcome.status}`);
+      if (outcome.status === WorkStatus.Completed) {
+        console.log(`[Work onAfter] Result: ${outcome.result}`);
+      }
+    },
+  });
+
+  // Use the work in a tree
+  const treeWithWorkHooks = Work.tree('treeWithWorkHooks').addSerial(workWithHooks);
+
+  await treeWithWorkHooks.run({ name: 'World' });
+
+  console.log('\n=== Example 2: Tree-level onBefore and onAfter ===\n');
+
+  const basicTree = Work.tree<{ userId: string }>('basicWorkflow', {
     onBefore: async (ctx) => {
       console.log(`[onBefore] Starting workflow for user: ${ctx.data.userId}`);
       console.log(`[onBefore] Timestamp: ${new Date().toISOString()}`);
@@ -38,7 +63,7 @@ async function main() {
 
   await basicTree.run({ userId: 'user-123' });
 
-  console.log('\n=== Example 2: setOnAfter with Full Type Inference ===\n');
+  console.log('\n=== Example 3: setOnAfter with Full Type Inference ===\n');
 
   const typedTree = Work.tree('typedWorkflow')
     .addSerial({
@@ -78,7 +103,7 @@ async function main() {
 
   await typedTree.run({});
 
-  console.log('\n=== Example 3: Error Handling with onAfter ===\n');
+  console.log('\n=== Example 4: Error Handling with onAfter ===\n');
 
   const errorTree = Work.tree('errorWorkflow', {
     onBefore: async () => {
@@ -102,7 +127,7 @@ async function main() {
 
   await errorTree.run({});
 
-  console.log('\n=== Example 4: Safe Lock/Unlock (try/finally semantics) ===\n');
+  console.log('\n=== Example 5: Safe Lock/Unlock (try/finally semantics) ===\n');
 
   // Simulating a lock that must be released even if onBefore fails after acquiring
   let lockHeld = false;
@@ -132,7 +157,7 @@ async function main() {
   await lockTree.run({});
   console.log(`Lock still held? ${lockHeld}`); // Should be false!
 
-  console.log('\n=== Example 5: Nested Trees with Hooks ===\n');
+  console.log('\n=== Example 6: Nested Trees with Hooks ===\n');
 
   const innerTree = Work.tree('innerTree', {
     onBefore: async () => console.log('    [Inner onBefore]'),
@@ -168,7 +193,7 @@ async function main() {
 
   await outerTree.run({});
 
-  console.log('\n=== Example 6: Transaction-like Pattern ===\n');
+  console.log('\n=== Example 7: Transaction-like Pattern ===\n');
 
   // Simulating a transaction with setup and cleanup
   const transactionTree = Work.tree('transaction', {
@@ -210,7 +235,7 @@ async function main() {
 
   await transactionTree.run({});
 
-  console.log('\n=== Example 7: Conditional Skip (onAfter not called) ===\n');
+  console.log('\n=== Example 8: Conditional Skip (onAfter not called) ===\n');
 
   const skippableTree = Work.tree('skippable', {
     shouldRun: (ctx) => Boolean(ctx.data.enabled),

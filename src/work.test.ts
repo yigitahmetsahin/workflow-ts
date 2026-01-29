@@ -20,20 +20,29 @@ describe('Work', () => {
     it('should assign all optional properties from definition', () => {
       const executeFn = vi.fn().mockResolvedValue('result');
       const shouldRunFn = vi.fn().mockReturnValue(true);
+      const onBeforeFn = vi.fn();
+      const onAfterFn = vi.fn();
       const onErrorFn = vi.fn();
+      const onSkippedFn = vi.fn();
 
       const work = new Work({
         name: 'fullWork',
         execute: executeFn,
         shouldRun: shouldRunFn,
+        onBefore: onBeforeFn,
+        onAfter: onAfterFn,
         onError: onErrorFn,
+        onSkipped: onSkippedFn,
         silenceError: true,
       });
 
       expect(work.name).toBe('fullWork');
       expect(work.execute).toBe(executeFn);
       expect(work.shouldRun).toBe(shouldRunFn);
+      expect(work.onBefore).toBe(onBeforeFn);
+      expect(work.onAfter).toBe(onAfterFn);
       expect(work.onError).toBe(onErrorFn);
+      expect(work.onSkipped).toBe(onSkippedFn);
       expect(work.silenceError).toBe(true);
     });
 
@@ -45,7 +54,10 @@ describe('Work', () => {
 
       expect(work.name).toBe('minimalWork');
       expect(work.shouldRun).toBeUndefined();
+      expect(work.onBefore).toBeUndefined();
+      expect(work.onAfter).toBeUndefined();
       expect(work.onError).toBeUndefined();
+      expect(work.onSkipped).toBeUndefined();
       expect(work.silenceError).toBeUndefined();
     });
 
@@ -274,6 +286,162 @@ describe('Work', () => {
       await work.onError!(error, mockContext);
 
       expect(errorLogged).toBe(true);
+    });
+  });
+
+  describe('onBefore', () => {
+    it('should assign onBefore from definition', () => {
+      const onBeforeFn = vi.fn();
+
+      const work = new Work({
+        name: 'workWithBefore',
+        execute: async () => 'result',
+        onBefore: onBeforeFn,
+      });
+
+      expect(work.onBefore).toBe(onBeforeFn);
+    });
+
+    it('should call onBefore with context when provided', () => {
+      const onBeforeFn = vi.fn();
+
+      const work = new Work({
+        name: 'workWithBefore',
+        execute: async () => 'result',
+        onBefore: onBeforeFn,
+      });
+
+      const mockContext = {
+        data: { id: 123 },
+        workResults: {
+          get: vi.fn(),
+          set: vi.fn(),
+          has: vi.fn(),
+        },
+      } as WorkflowContext<{ id: number }, Record<string, unknown>>;
+
+      work.onBefore!(mockContext);
+
+      expect(onBeforeFn).toHaveBeenCalledWith(mockContext);
+    });
+
+    it('should support async onBefore', async () => {
+      let beforeCalled = false;
+
+      const work = new Work({
+        name: 'asyncBeforeHandler',
+        execute: async () => 'result',
+        onBefore: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          beforeCalled = true;
+        },
+      });
+
+      const mockContext = {
+        data: {},
+        workResults: {
+          get: vi.fn(),
+          set: vi.fn(),
+          has: vi.fn(),
+        },
+      } as WorkflowContext<Record<string, unknown>, Record<string, unknown>>;
+
+      await work.onBefore!(mockContext);
+
+      expect(beforeCalled).toBe(true);
+    });
+
+    it('should leave onBefore undefined when not provided', () => {
+      const work = new Work({
+        name: 'minimalWork',
+        execute: async () => 'result',
+      });
+
+      expect(work.onBefore).toBeUndefined();
+    });
+  });
+
+  describe('onAfter', () => {
+    it('should assign onAfter from definition', () => {
+      const onAfterFn = vi.fn();
+
+      const work = new Work({
+        name: 'workWithAfter',
+        execute: async () => 'result',
+        onAfter: onAfterFn,
+      });
+
+      expect(work.onAfter).toBe(onAfterFn);
+    });
+
+    it('should call onAfter with context and outcome when provided', () => {
+      const onAfterFn = vi.fn();
+
+      const work = new Work({
+        name: 'workWithAfter',
+        execute: async () => 'result',
+        onAfter: onAfterFn,
+      });
+
+      const mockContext = {
+        data: { id: 123 },
+        workResults: {
+          get: vi.fn(),
+          set: vi.fn(),
+          has: vi.fn(),
+        },
+      } as WorkflowContext<{ id: number }, Record<string, unknown>>;
+
+      const mockOutcome = {
+        status: 'completed' as const,
+        result: 'result',
+        workResults: mockContext.workResults,
+      };
+
+      work.onAfter!(mockContext, mockOutcome);
+
+      expect(onAfterFn).toHaveBeenCalledWith(mockContext, mockOutcome);
+    });
+
+    it('should support async onAfter', async () => {
+      let afterCalled = false;
+
+      const work = new Work({
+        name: 'asyncAfterHandler',
+        execute: async () => 'result',
+        onAfter: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          afterCalled = true;
+        },
+      });
+
+      const mockContext = {
+        data: {},
+        workResults: {
+          get: vi.fn(),
+          set: vi.fn(),
+          has: vi.fn(),
+        },
+      } as WorkflowContext<Record<string, unknown>, Record<string, unknown>>;
+
+      const mockOutcome = {
+        status: 'completed' as const,
+        result: 'result',
+        workResults: mockContext.workResults,
+      };
+
+      await work.onAfter!(mockContext, mockOutcome);
+
+      expect(afterCalled).toBe(true);
+    });
+
+    it('should leave onAfter undefined when not provided', () => {
+      const work = new Work({
+        name: 'minimalWork',
+        execute: async () => 'result',
+      });
+
+      expect(work.onAfter).toBeUndefined();
     });
   });
 

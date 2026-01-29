@@ -2442,5 +2442,196 @@ describe('TreeWork.run()', () => {
         expect(onAfterFn.mock.calls[0][1].error?.message).toBe('step2 failed');
       });
     });
+
+    describe('work-level hooks', () => {
+      it('should call onBefore before work executes', async () => {
+        const executionOrder: string[] = [];
+
+        const work = new Work({
+          name: 'workWithBefore',
+          onBefore: async () => {
+            executionOrder.push('onBefore');
+          },
+          execute: async () => {
+            executionOrder.push('execute');
+            return 'result';
+          },
+        });
+
+        const tree = Work.tree('tree').addSerial(work);
+        await tree.run({});
+
+        expect(executionOrder).toEqual(['onBefore', 'execute']);
+      });
+
+      it('should call onAfter after work completes successfully', async () => {
+        const onAfterFn = vi.fn();
+
+        const work = new Work({
+          name: 'workWithAfter',
+          execute: async () => 'result',
+          onAfter: onAfterFn,
+        });
+
+        const tree = Work.tree('tree').addSerial(work);
+        await tree.run({});
+
+        expect(onAfterFn).toHaveBeenCalledTimes(1);
+        expect(onAfterFn.mock.calls[0][1].status).toBe(WorkStatus.Completed);
+        expect(onAfterFn.mock.calls[0][1].result).toBe('result');
+      });
+
+      it('should call onAfter after work fails', async () => {
+        const onAfterFn = vi.fn();
+
+        const work = new Work({
+          name: 'failingWork',
+          execute: async () => {
+            throw new Error('work failed');
+          },
+          onAfter: onAfterFn,
+          silenceError: true,
+        });
+
+        const tree = Work.tree('tree').addSerial(work);
+        await tree.run({});
+
+        expect(onAfterFn).toHaveBeenCalledTimes(1);
+        expect(onAfterFn.mock.calls[0][1].status).toBe(WorkStatus.Failed);
+        expect(onAfterFn.mock.calls[0][1].error?.message).toBe('work failed');
+      });
+
+      it('should NOT call onBefore or onAfter when work is skipped', async () => {
+        const onBeforeFn = vi.fn();
+        const onAfterFn = vi.fn();
+        const onSkippedFn = vi.fn();
+
+        const work = new Work({
+          name: 'skippedWork',
+          shouldRun: () => false,
+          onBefore: onBeforeFn,
+          onAfter: onAfterFn,
+          onSkipped: onSkippedFn,
+          execute: async () => 'result',
+        });
+
+        const tree = Work.tree('tree').addSerial(work);
+        await tree.run({});
+
+        expect(onBeforeFn).not.toHaveBeenCalled();
+        expect(onAfterFn).not.toHaveBeenCalled();
+        expect(onSkippedFn).toHaveBeenCalledTimes(1);
+      });
+
+      it('should call onAfter even when onBefore fails (try/finally semantics)', async () => {
+        const onAfterFn = vi.fn();
+
+        const work = new Work({
+          name: 'workWithFailingBefore',
+          onBefore: async () => {
+            throw new Error('onBefore failed');
+          },
+          execute: async () => 'result',
+          onAfter: onAfterFn,
+          silenceError: true,
+        });
+
+        const tree = Work.tree('tree').addSerial(work);
+        await tree.run({});
+
+        expect(onAfterFn).toHaveBeenCalledTimes(1);
+        expect(onAfterFn.mock.calls[0][1].status).toBe(WorkStatus.Failed);
+        expect(onAfterFn.mock.calls[0][1].error?.message).toBe('onBefore failed');
+      });
+
+      it('should call hooks in correct order: onBefore, execute, onAfter', async () => {
+        const executionOrder: string[] = [];
+
+        const work = new Work({
+          name: 'orderedWork',
+          onBefore: async () => {
+            executionOrder.push('onBefore');
+          },
+          execute: async () => {
+            executionOrder.push('execute');
+            return 'result';
+          },
+          onAfter: async () => {
+            executionOrder.push('onAfter');
+          },
+        });
+
+        const tree = Work.tree('tree').addSerial(work);
+        await tree.run({});
+
+        expect(executionOrder).toEqual(['onBefore', 'execute', 'onAfter']);
+      });
+
+      it('should call work hooks for each work in parallel execution', async () => {
+        const work1Before = vi.fn();
+        const work1After = vi.fn();
+        const work2Before = vi.fn();
+        const work2After = vi.fn();
+
+        const work1 = new Work({
+          name: 'work1',
+          onBefore: work1Before,
+          execute: async () => 'result1',
+          onAfter: work1After,
+        });
+
+        const work2 = new Work({
+          name: 'work2',
+          onBefore: work2Before,
+          execute: async () => 'result2',
+          onAfter: work2After,
+        });
+
+        const tree = Work.tree('tree').addParallel([work1, work2]);
+        await tree.run({});
+
+        expect(work1Before).toHaveBeenCalledTimes(1);
+        expect(work1After).toHaveBeenCalledTimes(1);
+        expect(work2Before).toHaveBeenCalledTimes(1);
+        expect(work2After).toHaveBeenCalledTimes(1);
+      });
+
+      it('should not execute work when onBefore fails', async () => {
+        const executeFn = vi.fn().mockResolvedValue('result');
+
+        const work = new Work({
+          name: 'workWithFailingBefore',
+          onBefore: async () => {
+            throw new Error('onBefore failed');
+          },
+          execute: executeFn,
+          silenceError: true,
+        });
+
+        const tree = Work.tree('tree').addSerial(work);
+        await tree.run({});
+
+        expect(executeFn).not.toHaveBeenCalled();
+      });
+
+      it('should silence onAfter errors (not affect work result)', async () => {
+        const work = new Work({
+          name: 'workWithFailingAfter',
+          execute: async () => 'result',
+          onAfter: async () => {
+            throw new Error('onAfter failed');
+          },
+        });
+
+        const tree = Work.tree('tree').addSerial(work);
+        const result = await tree.run({});
+
+        // Work should still be completed despite onAfter throwing
+        expect(result.status).toBe(WorkStatus.Completed);
+        expect(result.context.workResults.get('workWithFailingAfter').status).toBe(
+          WorkStatus.Completed
+        );
+      });
+    });
   });
 });

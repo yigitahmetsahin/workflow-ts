@@ -296,9 +296,9 @@ tree.addSerial({
 
 ## Lifecycle Hooks
 
-Trees support `onBefore` and `onAfter` hooks for setup and cleanup operations.
+Both trees and individual works support `onBefore` and `onAfter` hooks for setup and cleanup operations.
 
-### Execution Flow
+### Tree Execution Flow
 
 ```mermaid
 flowchart TD
@@ -312,6 +312,32 @@ flowchart TD
     H -->|yes| I["onAfter (Failed, handled)"]
     H -->|no| J["onAfter (Failed)"]
     J --> K[Propagate error]
+```
+
+### Work Execution Flow
+
+```mermaid
+flowchart TD
+    A[Work executed] --> B{shouldRun?}
+    B -->|false| C[onSkipped]
+    C --> D["Result: Skipped"]
+    B -->|true/undefined| E[onBefore]
+    E --> F[execute]
+    F --> G{timeout?}
+    G -->|yes| H[onTimeout]
+    H --> I{retry?}
+    G -->|no error| J{Success?}
+    J -->|yes| K["onAfter (Completed)"]
+    K --> L["Result: Completed"]
+    J -->|no| I
+    I -->|attempts left| M[onRetry]
+    M --> F
+    I -->|no retries| N[onError]
+    N --> O{silenceError?}
+    O -->|yes| P["onAfter (Failed, silenced)"]
+    P --> Q["Result: Failed (silenced)"]
+    O -->|no| R["onAfter (Failed)"]
+    R --> S[Propagate error]
 ```
 
 ### `onBefore` Hook
@@ -446,6 +472,40 @@ const outerTree = Work.tree('outer', {
 
 // Output order: "Outer starting" → "Inner starting" → "Inner done" → "Outer done"
 ```
+
+### Work-level Hooks
+
+Individual `Work` instances also support `onBefore` and `onAfter` hooks:
+
+```typescript
+const workWithHooks = new Work({
+  name: 'workWithHooks',
+  onBefore: async (ctx) => {
+    console.log('Starting work...');
+  },
+  execute: async (ctx) => {
+    return `Hello, ${ctx.data.name}!`;
+  },
+  onAfter: async (ctx, outcome) => {
+    console.log(`Work finished with status: ${outcome.status}`);
+    if (outcome.status === WorkStatus.Completed) {
+      console.log('Result:', outcome.result);
+    }
+  },
+});
+
+// Use in a tree
+const tree = Work.tree('myTree').addSerial(workWithHooks);
+await tree.run({ name: 'World' });
+```
+
+Work-level hook behavior:
+
+- `onBefore` is called after `shouldRun` passes, before `execute`
+- `onAfter` is called after execution completes (success or failure)
+- **Neither hook is called** when work is skipped (via `shouldRun` returning false)
+- `onAfter` **is called** even when `onBefore` fails (try/finally semantics)
+- Errors thrown in `onAfter` are silently ignored (don't affect work result)
 
 ## Error Handling
 

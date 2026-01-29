@@ -242,6 +242,8 @@ const myWork = new Work({
   name: 'myWork',
   execute: async (ctx) => value,
   shouldRun: (ctx) => true, // optional
+  onBefore: (ctx) => console.log('Starting work...'), // optional - called before execute
+  onAfter: (ctx, outcome) => console.log(`Done: ${outcome.status}`), // optional - called after execute
   onError: (error, ctx) => {}, // optional
   onSkipped: (ctx) => {}, // optional - called when shouldRun returns false
   silenceError: true, // optional - don't fail tree on error
