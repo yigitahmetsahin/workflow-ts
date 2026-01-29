@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [7.0.0](https://github.com/yigitahmetsahin/work-tree/compare/v6.6.0...v7.0.0) (2026-01-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* Work-level `timeout` now wraps entire work execution including all retry attempts. For per-attempt timeout, use the new `retry.attemptTimeout` option instead.
+
+### Features
+
+* change timeout to work-level, add attemptTimeout in retry options ([1d4620d](https://github.com/yigitahmetsahin/work-tree/commit/1d4620dad8cfa5e1b7c0be41d5ec982ddffa6e32))
+
 ## [6.6.0](https://github.com/yigitahmetsahin/work-tree/compare/v6.5.0...v6.6.0) (2026-01-29)
 
 
