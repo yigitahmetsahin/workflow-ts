@@ -27,6 +27,7 @@ export function normalizeRetryConfig(
     backoff: retry.backoff ?? 'fixed',
     backoffMultiplier: retry.backoffMultiplier ?? 2,
     maxDelay: retry.maxDelay ?? Infinity,
+    attemptTimeout: retry.attemptTimeout,
     shouldRetry: retry.shouldRetry,
     onRetry: retry.onRetry,
   };

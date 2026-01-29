@@ -147,10 +147,12 @@ Retry mechanisms demonstrating:
 
 Timeout mechanisms demonstrating:
 
-- Simple timeout (`timeout: 5000`)
+- Timeout hierarchy (tree → work → attempt)
+- Simple work timeout (`timeout: 5000`) - wraps entire work including all retries
 - Timeout with `onTimeout` callback for logging/cleanup
 - Tree-level timeout for entire workflow
-- Timeout with retry (timeouts trigger retries)
+- Attempt timeout (`retry.attemptTimeout`) - per-attempt timeout that triggers retries
+- Combining work timeout and attempt timeout for robust error handling
 - Timeout with `silenceError` for non-critical work
 - Timeout with `onError` for custom error handling
 - Parallel works with individual timeouts

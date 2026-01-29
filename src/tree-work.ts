@@ -740,24 +740,78 @@ export class TreeWork<
 
       // Retry logic for parallel works
       const retryOptions = normalizeRetryConfig(workDef.retry);
-      const timeoutOptions = normalizeTimeoutConfig(workDef.timeout);
+      // Work-level timeout wraps the entire retry loop
+      const workTimeoutOptions = normalizeTimeoutConfig(workDef.timeout);
+      // Attempt-level timeout is in retry options
+      const attemptTimeoutOptions = retryOptions?.attemptTimeout
+        ? { ms: retryOptions.attemptTimeout }
+        : null;
       const maxAttempts = retryOptions ? retryOptions.maxRetries + 1 : 1;
+
+      // State that needs to be accessible for result tracking
       let lastError: Error | null = null;
       let attempt = 0;
 
-      while (attempt < maxAttempts) {
-        attempt++;
+      // Inner function that contains the retry loop
+      const executeWithRetries = async (): Promise<
+        { success: true; result: unknown } | { success: false; error: Error }
+      > => {
+        while (attempt < maxAttempts) {
+          attempt++;
 
-        try {
-          const result = await executeWithTimeout(
-            () => workDef.execute(context),
-            workDef.name,
-            timeoutOptions,
-            context
-          );
+          try {
+            const result = await executeWithTimeout(
+              () => workDef.execute(context),
+              workDef.name,
+              attemptTimeoutOptions,
+              context
+            );
+            return { success: true, result };
+          } catch (error) {
+            lastError = error instanceof Error ? error : new Error(String(error));
+
+            // Check if we should retry
+            const isLastAttempt = attempt >= maxAttempts;
+            if (!isLastAttempt && retryOptions) {
+              // Check shouldRetry callback if provided
+              if (retryOptions.shouldRetry) {
+                const shouldRetry = await retryOptions.shouldRetry(lastError, attempt, context);
+                if (!shouldRetry) {
+                  break; // Stop retrying
+                }
+              }
+
+              // Call onRetry hook before the retry
+              if (retryOptions.onRetry) {
+                await retryOptions.onRetry(lastError, attempt, context);
+              }
+
+              // Calculate and wait for delay
+              const delay = calculateRetryDelay(retryOptions, attempt);
+              if (delay > 0) {
+                await sleep(delay);
+              }
+            }
+          }
+        }
+
+        // All attempts failed
+        return { success: false, error: lastError! };
+      };
+
+      try {
+        // Execute retry loop with work-level timeout (if configured)
+        const outcome = await executeWithTimeout(
+          executeWithRetries,
+          workDef.name,
+          workTimeoutOptions,
+          context
+        );
+
+        if (outcome.success) {
           const completedResult: WorkResult = {
             status: WorkStatus.Completed,
-            result,
+            result: outcome.result,
             duration: Date.now() - workStartTime,
             parent: parentName,
             attempts: attempt,
@@ -767,69 +821,73 @@ export class TreeWork<
           workResults.set(workDef.name, completedResult);
 
           // Call onAfter on success
-          await callOnAfter(WorkStatus.Completed, result, undefined);
+          await callOnAfter(WorkStatus.Completed, outcome.result, undefined);
 
-          return { name: workDef.name, result };
-        } catch (error) {
-          lastError = error instanceof Error ? error : new Error(String(error));
+          return { name: workDef.name, result: outcome.result };
+        }
 
-          // Check if we should retry
-          const isLastAttempt = attempt >= maxAttempts;
-          if (!isLastAttempt && retryOptions) {
-            // Check shouldRetry callback if provided
-            if (retryOptions.shouldRetry) {
-              const shouldRetry = await retryOptions.shouldRetry(lastError, attempt, context);
-              if (!shouldRetry) {
-                break; // Stop retrying
-              }
-            }
+        // All retries exhausted
+        const err = outcome.error;
+        const failedResult: WorkResult = {
+          status: WorkStatus.Failed,
+          error: err,
+          duration: Date.now() - workStartTime,
+          parent: parentName,
+          attempts: attempt,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        context.workResults.set(workDef.name as any, failedResult as any);
+        workResults.set(workDef.name, failedResult);
 
-            // Call onRetry hook before the retry
-            if (retryOptions.onRetry) {
-              await retryOptions.onRetry(lastError, attempt, context);
-            }
+        // Call onAfter on failure
+        await callOnAfter(WorkStatus.Failed, undefined, err);
 
-            // Calculate and wait for delay
-            const delay = calculateRetryDelay(retryOptions, attempt);
-            if (delay > 0) {
-              await sleep(delay);
-            }
+        if (workDef.silenceError) {
+          return { name: workDef.name, handled: true };
+        }
+
+        if (workDef.onError) {
+          try {
+            await workDef.onError(err, context);
+            return { name: workDef.name, handled: true };
+          } catch {
+            return { name: workDef.name, error: err };
           }
         }
-      }
 
-      // All attempts failed
-      const err = lastError!;
-      const duration = Date.now() - workStartTime;
+        return { name: workDef.name, error: err };
+      } catch (error) {
+        // Work-level timeout error (or other unexpected error)
+        const err = error instanceof Error ? error : new Error(String(error));
+        const failedResult: WorkResult = {
+          status: WorkStatus.Failed,
+          error: err,
+          duration: Date.now() - workStartTime,
+          parent: parentName,
+          attempts: attempt,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        context.workResults.set(workDef.name as any, failedResult as any);
+        workResults.set(workDef.name, failedResult);
 
-      const failedResult: WorkResult = {
-        status: WorkStatus.Failed,
-        error: err,
-        duration,
-        parent: parentName,
-        attempts: attempt,
-      };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      context.workResults.set(workDef.name as any, failedResult as any);
-      workResults.set(workDef.name, failedResult);
+        // Call onAfter on timeout/error
+        await callOnAfter(WorkStatus.Failed, undefined, err);
 
-      // Call onAfter on failure
-      await callOnAfter(WorkStatus.Failed, undefined, err);
-
-      if (workDef.silenceError) {
-        return { name: workDef.name, handled: true };
-      }
-
-      if (workDef.onError) {
-        try {
-          await workDef.onError(err, context);
+        if (workDef.silenceError) {
           return { name: workDef.name, handled: true };
-        } catch {
-          return { name: workDef.name, error: err };
         }
-      }
 
-      return { name: workDef.name, error: err };
+        if (workDef.onError) {
+          try {
+            await workDef.onError(err, context);
+            return { name: workDef.name, handled: true };
+          } catch {
+            return { name: workDef.name, error: err };
+          }
+        }
+
+        return { name: workDef.name, error: err };
+      }
     });
 
     const parallelResults = await Promise.all(promises);
@@ -946,24 +1004,78 @@ export class TreeWork<
     }
 
     const retryOptions = normalizeRetryConfig(work.retry);
-    const timeoutOptions = normalizeTimeoutConfig(work.timeout);
+    // Work-level timeout wraps the entire retry loop
+    const workTimeoutOptions = normalizeTimeoutConfig(work.timeout);
+    // Attempt-level timeout is in retry options
+    const attemptTimeoutOptions = retryOptions?.attemptTimeout
+      ? { ms: retryOptions.attemptTimeout }
+      : null;
     const maxAttempts = retryOptions ? retryOptions.maxRetries + 1 : 1;
+
+    // State that needs to be accessible for result tracking
     let lastError: Error | null = null;
     let attempt = 0;
 
-    while (attempt < maxAttempts) {
-      attempt++;
+    // Inner function that contains the retry loop
+    const executeWithRetries = async (): Promise<
+      { success: true; result: unknown } | { success: false; error: Error }
+    > => {
+      while (attempt < maxAttempts) {
+        attempt++;
 
-      try {
-        const result = await executeWithTimeout(
-          () => work.execute(context),
-          work.name,
-          timeoutOptions,
-          context
-        );
+        try {
+          const result = await executeWithTimeout(
+            () => work.execute(context),
+            work.name,
+            attemptTimeoutOptions,
+            context
+          );
+          return { success: true, result };
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+
+          // Check if we should retry
+          const isLastAttempt = attempt >= maxAttempts;
+          if (!isLastAttempt && retryOptions) {
+            // Check shouldRetry callback if provided
+            if (retryOptions.shouldRetry) {
+              const shouldRetry = await retryOptions.shouldRetry(lastError, attempt, context);
+              if (!shouldRetry) {
+                break; // Stop retrying
+              }
+            }
+
+            // Call onRetry hook before the retry
+            if (retryOptions.onRetry) {
+              await retryOptions.onRetry(lastError, attempt, context);
+            }
+
+            // Calculate and wait for delay
+            const delay = calculateRetryDelay(retryOptions, attempt);
+            if (delay > 0) {
+              await sleep(delay);
+            }
+          }
+        }
+      }
+
+      // All attempts failed
+      return { success: false, error: lastError! };
+    };
+
+    try {
+      // Execute retry loop with work-level timeout (if configured)
+      const outcome = await executeWithTimeout(
+        executeWithRetries,
+        work.name,
+        workTimeoutOptions,
+        context
+      );
+
+      if (outcome.success) {
         const completedResult: WorkResult = {
           status: WorkStatus.Completed,
-          result,
+          result: outcome.result,
           duration: Date.now() - workStartTime,
           parent: parentName,
           attempts: attempt,
@@ -973,62 +1085,63 @@ export class TreeWork<
         workResults.set(work.name, completedResult);
 
         // Call onAfter on success
-        await callOnAfter(WorkStatus.Completed, result, undefined);
-
+        await callOnAfter(WorkStatus.Completed, outcome.result, undefined);
         return;
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-
-        // Check if we should retry
-        const isLastAttempt = attempt >= maxAttempts;
-        if (!isLastAttempt && retryOptions) {
-          // Check shouldRetry callback if provided
-          if (retryOptions.shouldRetry) {
-            const shouldRetry = await retryOptions.shouldRetry(lastError, attempt, context);
-            if (!shouldRetry) {
-              break; // Stop retrying
-            }
-          }
-
-          // Call onRetry hook before the retry
-          if (retryOptions.onRetry) {
-            await retryOptions.onRetry(lastError, attempt, context);
-          }
-
-          // Calculate and wait for delay
-          const delay = calculateRetryDelay(retryOptions, attempt);
-          if (delay > 0) {
-            await sleep(delay);
-          }
-        }
       }
+
+      // All retries exhausted
+      const err = outcome.error;
+      const failedResult: WorkResult = {
+        status: WorkStatus.Failed,
+        error: err,
+        duration: Date.now() - workStartTime,
+        parent: parentName,
+        attempts: attempt,
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      context.workResults.set(work.name as any, failedResult as any);
+      workResults.set(work.name, failedResult);
+
+      // Call onAfter on failure
+      await callOnAfter(WorkStatus.Failed, undefined, err);
+
+      if (work.silenceError) {
+        return;
+      }
+
+      if (work.onError) {
+        await work.onError(err, context);
+        return;
+      }
+
+      throw err;
+    } catch (error) {
+      // Work-level timeout error (or other unexpected error)
+      const err = error instanceof Error ? error : new Error(String(error));
+      const failedResult: WorkResult = {
+        status: WorkStatus.Failed,
+        error: err,
+        duration: Date.now() - workStartTime,
+        parent: parentName,
+        attempts: attempt,
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      context.workResults.set(work.name as any, failedResult as any);
+      workResults.set(work.name, failedResult);
+
+      // Call onAfter on timeout/error
+      await callOnAfter(WorkStatus.Failed, undefined, err);
+
+      if (work.silenceError) {
+        return;
+      }
+
+      if (work.onError) {
+        await work.onError(err, context);
+        return;
+      }
+
+      throw err;
     }
-
-    // All attempts failed
-    const err = lastError!;
-    const failedResult: WorkResult = {
-      status: WorkStatus.Failed,
-      error: err,
-      duration: Date.now() - workStartTime,
-      parent: parentName,
-      attempts: attempt,
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    context.workResults.set(work.name as any, failedResult as any);
-    workResults.set(work.name, failedResult);
-
-    // Call onAfter on failure
-    await callOnAfter(WorkStatus.Failed, undefined, err);
-
-    if (work.silenceError) {
-      return;
-    }
-
-    if (work.onError) {
-      await work.onError(err, context);
-      return;
-    }
-
-    throw err;
   }
 }

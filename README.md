@@ -206,7 +206,7 @@ Each work can have the following properties:
   onSkipped: (ctx) => {},        // Optional: called when skipped
   silenceError: false,           // Optional: continue on error
   retry: 3,                      // Optional: retry configuration
-  timeout: 5000,                 // Optional: timeout in ms
+  timeout: 5000,                 // Optional: timeout for entire work (including retries)
 }
 ```
 
@@ -322,23 +322,38 @@ flowchart TD
     B -->|false| C[onSkipped]
     C --> D["Result: Skipped"]
     B -->|true/undefined| E[onBefore]
-    E --> F[execute]
-    F --> G{timeout?}
-    G -->|yes| H[onTimeout]
-    H --> I{retry?}
-    G -->|no error| J{Success?}
-    J -->|yes| K["onAfter (Completed)"]
-    K --> L["Result: Completed"]
-    J -->|no| I
-    I -->|attempts left| M[onRetry]
-    M --> F
-    I -->|no retries| N[onError]
-    N --> O{silenceError?}
-    O -->|yes| P["onAfter (Failed, silenced)"]
-    P --> Q["Result: Failed (silenced)"]
-    O -->|no| R["onAfter (Failed)"]
-    R --> S[Propagate error]
+    E --> F[Start retry loop]
+
+    subgraph WorkTimeout ["Work Timeout (wraps entire retry loop)"]
+        F --> G[execute attempt]
+
+        subgraph AttemptTimeout ["Attempt Timeout (per attempt)"]
+            G --> H{attemptTimeout?}
+            H -->|exceeded| I[Timeout error]
+            H -->|ok| J{Success?}
+        end
+
+        I --> K{retry?}
+        J -->|yes| L["onAfter (Completed)"]
+        J -->|no| K
+        K -->|attempts left| M[onRetry + delay]
+        M --> G
+        K -->|no retries| N[Last error]
+    end
+
+    L --> O["Result: Completed"]
+    N --> P[onError]
+    P --> Q{silenceError?}
+    Q -->|yes| R["onAfter (Failed, silenced)"]
+    R --> S["Result: Failed (silenced)"]
+    Q -->|no| T["onAfter (Failed)"]
+    T --> U[Propagate error]
 ```
+
+**Timeout Hierarchy:**
+
+- **Work timeout** wraps the entire retry loop - if total time exceeds work timeout, fails immediately
+- **Attempt timeout** (`retry.attemptTimeout`) wraps each individual attempt - triggers retry if exceeded
 
 ### `onBefore` Hook
 
@@ -720,6 +735,14 @@ tree.addSerial({
 
 Works can be configured to timeout if execution takes too long.
 
+### Timeout Hierarchy
+
+Timeouts operate at three levels, with outer timeouts canceling inner operations:
+
+1. **Tree timeout** (outermost): Wraps all works in the tree
+2. **Work timeout** (middle): Wraps entire work including all retries + delays
+3. **Attempt timeout** (innermost, in `retry.attemptTimeout`): Wraps each individual attempt
+
 ### Simple Timeout
 
 ```typescript
@@ -729,7 +752,7 @@ tree.addSerial({
     // If this takes longer than 5 seconds, it will timeout
     return await fetchDataFromSlowService();
   },
-  timeout: 5000, // 5 seconds
+  timeout: 5000, // 5 seconds for the entire work (including all retries)
 });
 ```
 
@@ -742,7 +765,7 @@ tree.addSerial({
     return await fetch('/api/slow-endpoint');
   },
   timeout: {
-    ms: 10000, // 10 seconds
+    ms: 10000, // 10 seconds for entire work
     onTimeout: async (ctx) => {
       // Called when timeout occurs (before error is thrown)
       console.log('Operation timed out for user:', ctx.data.userId);
@@ -767,7 +790,7 @@ const tree = Work.tree('workflow', {
 
 ### Timeout with Retry
 
-Timeout works seamlessly with retry - if a work times out, it can trigger a retry:
+Use `attemptTimeout` in retry options to timeout individual attempts and trigger retries:
 
 ```typescript
 tree.addSerial({
@@ -776,9 +799,32 @@ tree.addSerial({
     // Sometimes this is slow, sometimes fast
     return await unreliableApi();
   },
-  timeout: 3000, // Timeout after 3 seconds
-  retry: 2, // Retry up to 2 times on timeout (or any error)
+  retry: {
+    maxRetries: 2,
+    attemptTimeout: 3000, // 3s per attempt - triggers retry on timeout
+  },
 });
+```
+
+### Combining Work Timeout and Attempt Timeout
+
+Use both for robust timeout handling:
+
+```typescript
+tree.addSerial({
+  name: 'reliableWithinBudget',
+  execute: async () => {
+    return await unreliableApi();
+  },
+  timeout: 30000, // 30s total budget for all attempts
+  retry: {
+    maxRetries: 5,
+    attemptTimeout: 5000, // 5s per attempt
+    delay: 1000, // 1s between retries
+  },
+});
+// This allows ~5 attempts at 5s each with 1s delays = ~29s total
+// Work timeout ensures we never exceed 30s total
 ```
 
 ### Handling Timeout Errors

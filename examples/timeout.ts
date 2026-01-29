@@ -112,9 +112,9 @@ async function main() {
   }
 
   // ==========================================================================
-  // Example 5: Timeout with retry
+  // Example 5: Timeout with retry (using attemptTimeout)
   // ==========================================================================
-  console.log('\n=== Example 5: Timeout with retry ===\n');
+  console.log('\n=== Example 5: Timeout with retry (attemptTimeout) ===\n');
 
   let attempt5 = 0;
   const timeoutRetryTree = Work.tree('timeoutRetry').addSerial({
@@ -130,14 +130,43 @@ async function main() {
       await slowOperation(10);
       return 'success!';
     },
-    timeout: 50, // Times out after 50ms
-    retry: 3, // Retry up to 3 times on any error (including timeout)
+    retry: {
+      maxRetries: 3,
+      attemptTimeout: 50, // Each attempt times out after 50ms, triggering retry
+    },
   });
 
   const result5 = await timeoutRetryTree.run({});
   console.log(`  Status: ${result5.status}`);
   console.log(`  Total attempts: ${result5.context.workResults.get('unreliableService').attempts}`);
   console.log(`  Result: ${result5.context.workResults.get('unreliableService').result}`);
+
+  // ==========================================================================
+  // Example 5b: Work timeout wraps entire retry loop
+  // ==========================================================================
+  console.log('\n=== Example 5b: Work timeout (wraps all retries) ===\n');
+
+  let attempt5b = 0;
+  const workTimeoutTree = Work.tree('workTimeout').addSerial({
+    name: 'budgetedService',
+    execute: async () => {
+      attempt5b++;
+      console.log(`  Attempt ${attempt5b}...`);
+      await slowOperation(30); // Each attempt takes 30ms
+      throw new Error('Always fails');
+    },
+    timeout: 100, // Total budget: 100ms for all attempts combined
+    retry: {
+      maxRetries: 10, // Would allow 11 attempts, but timeout cuts it short
+    },
+  });
+
+  const result5b = await workTimeoutTree.run({});
+  console.log(`  Status: ${result5b.status}`);
+  console.log(`  Total attempts: ${result5b.context.workResults.get('budgetedService').attempts}`);
+  if (result5b.error instanceof TimeoutError) {
+    console.log(`  Timeout error: ${result5b.error.message}`);
+  }
 
   // ==========================================================================
   // Example 6: Timeout with silenceError (continue on timeout)
@@ -255,15 +284,27 @@ async function main() {
   // ==========================================================================
   console.log('\n=== Summary ===');
   console.log(`
+Timeout Hierarchy (outer timeouts cancel inner operations):
+  1. Tree timeout - wraps all works in the tree
+  2. Work timeout - wraps entire work including all retries + delays
+  3. Attempt timeout (retry.attemptTimeout) - wraps each individual attempt
+
 Timeout options:
-  - Simple: timeout: 5000 (5 seconds)
+  - Simple: timeout: 5000 (5 seconds for entire work)
   - With callback: timeout: { ms: 5000, onTimeout: (ctx) => {} }
 
 Tree-level timeout:
   - Work.tree('name', { timeout: 60000 }) // 60 second timeout for entire tree
 
+Attempt-level timeout (in retry options):
+  - retry: { maxRetries: 3, attemptTimeout: 5000 } // 5s per attempt, triggers retry
+
+Combining timeouts:
+  - timeout: 30000, retry: { maxRetries: 5, attemptTimeout: 5000 }
+  - Work has 30s total budget, each attempt has 5s limit
+
 Timeout integrates with:
-  - retry: Timeout errors trigger retries
+  - retry: attemptTimeout errors trigger retries
   - silenceError: Continue tree on timeout
   - onError: Handle timeout errors manually
 

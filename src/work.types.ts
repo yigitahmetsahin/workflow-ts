@@ -99,6 +99,8 @@ export type RetryOptions<
   backoffMultiplier?: number;
   /** Maximum delay cap in milliseconds for exponential backoff (default: Infinity) */
   maxDelay?: number;
+  /** Timeout for each individual attempt in milliseconds. If an attempt exceeds this, it triggers a retry (if retries remain). */
+  attemptTimeout?: number;
   /** Optional: determine if a retry should be attempted based on the error */
   shouldRetry?: (
     error: Error,
@@ -122,20 +124,24 @@ export type RetryConfig<
 > = number | RetryOptions<TData, TAvailableWorkResults>;
 
 /**
- * Full timeout configuration options
+ * Full timeout configuration options for work-level timeout.
+ * Work-level timeout wraps the entire work execution including all retry attempts and delays.
+ * For per-attempt timeout, use `attemptTimeout` in RetryOptions instead.
  */
 export type TimeoutOptions<
   TData = Record<string, unknown>,
   TAvailableWorkResults extends Record<string, unknown> = Record<string, unknown>,
 > = {
-  /** Timeout duration in milliseconds */
+  /** Timeout duration in milliseconds for the entire work (including all retries) */
   ms: number;
   /** Optional: called when timeout occurs (before error is thrown) */
   onTimeout?: (context: WorkflowContext<TData, TAvailableWorkResults>) => void | Promise<void>;
 };
 
 /**
- * Timeout configuration - either a simple timeout in milliseconds or full options
+ * Timeout configuration - either a simple timeout in milliseconds or full options.
+ * This timeout applies to the entire work execution including all retry attempts.
+ * For per-attempt timeout, use `attemptTimeout` in RetryOptions instead.
  */
 export type TimeoutConfig<
   TData = Record<string, unknown>,
@@ -186,9 +192,9 @@ export type WorkBehaviorOptions<
   onSkipped?: (context: WorkflowContext<TData, TAvailableWorkResults>) => void | Promise<void>;
   /** Optional: if true, errors won't stop the workflow */
   silenceError?: boolean;
-  /** Optional: retry configuration - number of retries or full options */
+  /** Optional: retry configuration - number of retries or full options. Use `attemptTimeout` in retry options for per-attempt timeout. */
   retry?: RetryConfig<TData, TAvailableWorkResults>;
-  /** Optional: timeout configuration - milliseconds or full options */
+  /** Optional: timeout for entire work (including all retries). For per-attempt timeout, use `retry.attemptTimeout` instead. */
   timeout?: TimeoutConfig<TData, TAvailableWorkResults>;
 };
 
@@ -342,6 +348,8 @@ export type NormalizedRetryOptions = {
   backoff: 'fixed' | 'exponential';
   backoffMultiplier: number;
   maxDelay: number;
+  /** Timeout for each individual attempt in milliseconds */
+  attemptTimeout?: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   shouldRetry?: RetryOptions<any, any>['shouldRetry'];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -349,9 +357,11 @@ export type NormalizedRetryOptions = {
 };
 
 /**
- * Normalized timeout options with all defaults filled in (internal use)
+ * Normalized timeout options with all defaults filled in (internal use).
+ * This represents work-level timeout that wraps the entire execution including retries.
  */
 export type NormalizedTimeoutOptions = {
+  /** Timeout duration in milliseconds for the entire work (including all retries) */
   ms: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onTimeout?: TimeoutOptions<any, any>['onTimeout'];

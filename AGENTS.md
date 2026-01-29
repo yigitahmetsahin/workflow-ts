@@ -248,7 +248,7 @@ const myWork = new Work({
   onSkipped: (ctx) => {}, // optional - called when shouldRun returns false
   silenceError: true, // optional - don't fail tree on error
   retry: 3, // optional - retry up to 3 times on failure
-  timeout: 5000, // optional - timeout after 5 seconds
+  timeout: 5000, // optional - timeout for entire work (including all retries)
 });
 
 // Retry with full configuration
@@ -261,6 +261,7 @@ const retryWork = new Work({
     backoff: 'exponential', // 'fixed' | 'exponential'
     backoffMultiplier: 2, // delay grows: 1s, 2s, 4s...
     maxDelay: 30000, // cap at 30 seconds
+    attemptTimeout: 5000, // optional - timeout for each individual attempt
     shouldRetry: (error, attempt, ctx) => !error.message.includes('401'),
     onRetry: (error, attempt, ctx) => console.log(`Retry ${attempt}...`),
   },
@@ -271,17 +272,20 @@ const timeoutWork = new Work({
   name: 'timeoutWork',
   execute: async (ctx) => slowOperation(),
   timeout: {
-    ms: 10000, // 10 second timeout
+    ms: 10000, // 10 second timeout for entire work
     onTimeout: (ctx) => console.log('Operation timed out'), // optional callback
   },
 });
 
-// Timeout with retry (retries on timeout)
+// Timeout hierarchy: work timeout wraps all retries, attemptTimeout per attempt
 const timeoutRetryWork = new Work({
   name: 'timeoutRetry',
   execute: async (ctx) => unreliableService(),
-  timeout: 5000,
-  retry: 3, // will retry up to 3 times if operation times out
+  timeout: 30000, // 30s total for all attempts combined
+  retry: {
+    maxRetries: 3,
+    attemptTimeout: 5000, // 5s per individual attempt - triggers retry on timeout
+  },
 });
 
 // Use Work instances in trees

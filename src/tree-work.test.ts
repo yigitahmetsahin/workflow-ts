@@ -1666,7 +1666,7 @@ describe('TreeWork.run()', () => {
       expect(result.context.workResults.get('fastWork')?.result).toBe('fast');
     });
 
-    it('should trigger retry on timeout when both configured', async () => {
+    it('should trigger retry on timeout when attemptTimeout configured', async () => {
       let attempts = 0;
 
       const tree = Work.tree('tree').addSerial({
@@ -1679,8 +1679,10 @@ describe('TreeWork.run()', () => {
           }
           return 'success';
         },
-        timeout: 30,
-        retry: 3,
+        retry: {
+          maxRetries: 3,
+          attemptTimeout: 30, // Attempt-level timeout triggers retry
+        },
       });
 
       const result = await tree.run({});
@@ -1691,7 +1693,7 @@ describe('TreeWork.run()', () => {
       expect(result.context.workResults.get('timeoutRetry')?.attempts).toBe(3);
     });
 
-    it('should fail after exhausting retries on repeated timeouts', async () => {
+    it('should fail after exhausting retries on repeated attemptTimeouts', async () => {
       let attempts = 0;
 
       const tree = Work.tree('tree').addSerial({
@@ -1701,8 +1703,10 @@ describe('TreeWork.run()', () => {
           await new Promise((r) => setTimeout(r, 100));
           return 'should not return';
         },
-        timeout: 30,
-        retry: 2,
+        retry: {
+          maxRetries: 2,
+          attemptTimeout: 30, // Attempt-level timeout triggers retry
+        },
       });
 
       const result = await tree.run({});
@@ -1833,7 +1837,7 @@ describe('TreeWork.run()', () => {
       expect(onTimeoutFn.mock.calls[0][0].data).toEqual({ treeData: 'value' });
     });
 
-    it('should timeout work in parallel with retry', async () => {
+    it('should timeout work in parallel with attemptTimeout and retry', async () => {
       let attempts = 0;
 
       const tree = Work.tree('tree').addParallel([
@@ -1846,8 +1850,10 @@ describe('TreeWork.run()', () => {
             }
             return 'success';
           },
-          timeout: 30,
-          retry: 2,
+          retry: {
+            maxRetries: 2,
+            attemptTimeout: 30, // Attempt-level timeout triggers retry
+          },
         },
         {
           name: 'fastWork',
@@ -1947,6 +1953,224 @@ describe('TreeWork.run()', () => {
       expect(result.status).toBe(WorkStatus.Failed);
       expect(result.error).toBeInstanceOf(TimeoutError);
       expect(result.error?.message).toBe('Work "errorInCallback" timed out after 30ms');
+    });
+
+    describe('work-level timeout (wraps entire retry loop)', () => {
+      it('should timeout work when total retry time exceeds work timeout', async () => {
+        let attempts = 0;
+
+        const tree = Work.tree('tree').addSerial({
+          name: 'retryWork',
+          execute: async () => {
+            attempts++;
+            // Each attempt takes 30ms, so 3 attempts = 90ms
+            await new Promise((r) => setTimeout(r, 30));
+            throw new Error('Always fails');
+          },
+          timeout: 70, // Work timeout is 70ms total
+          retry: {
+            maxRetries: 5, // Would allow 6 total attempts, but timeout should cut it short
+          },
+        });
+
+        const result = await tree.run({});
+
+        expect(result.status).toBe(WorkStatus.Failed);
+        expect(result.error).toBeInstanceOf(TimeoutError);
+        expect(result.error?.message).toBe('Work "retryWork" timed out after 70ms');
+        // Should have only completed ~2 attempts before timeout (30ms + 30ms = 60ms, third attempt would exceed 70ms)
+        expect(attempts).toBeLessThanOrEqual(3);
+      });
+
+      it('should timeout work when retries plus delays exceed work timeout', async () => {
+        let attempts = 0;
+
+        const tree = Work.tree('tree').addSerial({
+          name: 'retryWithDelay',
+          execute: async () => {
+            attempts++;
+            throw new Error('Always fails');
+          },
+          timeout: 50, // Work timeout is 50ms total
+          retry: {
+            maxRetries: 10,
+            delay: 30, // 30ms delay between retries
+          },
+        });
+
+        const result = await tree.run({});
+
+        expect(result.status).toBe(WorkStatus.Failed);
+        expect(result.error).toBeInstanceOf(TimeoutError);
+        // Should timeout during retry delays
+        expect(attempts).toBeLessThanOrEqual(3);
+      });
+
+      it('should complete work within timeout even with retries', async () => {
+        let attempts = 0;
+
+        const tree = Work.tree('tree').addSerial({
+          name: 'eventualSuccess',
+          execute: async () => {
+            attempts++;
+            await new Promise((r) => setTimeout(r, 10));
+            if (attempts < 3) {
+              throw new Error('Retry needed');
+            }
+            return 'success';
+          },
+          timeout: 100, // Plenty of time for 3 attempts at 10ms each
+          retry: 5,
+        });
+
+        const result = await tree.run({});
+
+        expect(result.status).toBe(WorkStatus.Completed);
+        expect(result.context.workResults.get('eventualSuccess')?.result).toBe('success');
+        expect(attempts).toBe(3);
+      });
+    });
+
+    describe('attemptTimeout in retry options', () => {
+      it('should timeout individual attempt and trigger retry', async () => {
+        let attempts = 0;
+
+        const tree = Work.tree('tree').addSerial({
+          name: 'attemptTimeoutWork',
+          execute: async () => {
+            attempts++;
+            if (attempts < 3) {
+              // First two attempts are slow and will timeout
+              await new Promise((r) => setTimeout(r, 100));
+            }
+            return 'success';
+          },
+          retry: {
+            maxRetries: 3,
+            attemptTimeout: 30, // Each attempt times out after 30ms
+          },
+        });
+
+        const result = await tree.run({});
+
+        expect(result.status).toBe(WorkStatus.Completed);
+        expect(result.context.workResults.get('attemptTimeoutWork')?.result).toBe('success');
+        expect(attempts).toBe(3);
+        expect(result.context.workResults.get('attemptTimeoutWork')?.attempts).toBe(3);
+      });
+
+      it('should fail after exhausting retries with attemptTimeout', async () => {
+        let attempts = 0;
+
+        const tree = Work.tree('tree').addSerial({
+          name: 'alwaysSlow',
+          execute: async () => {
+            attempts++;
+            // Every attempt is slow
+            await new Promise((r) => setTimeout(r, 100));
+            return 'should not return';
+          },
+          retry: {
+            maxRetries: 2,
+            attemptTimeout: 30,
+          },
+        });
+
+        const result = await tree.run({});
+
+        expect(result.status).toBe(WorkStatus.Failed);
+        expect(result.error).toBeInstanceOf(TimeoutError);
+        expect(attempts).toBe(3); // 1 initial + 2 retries
+      });
+
+      it('should use attemptTimeout for each attempt independently', async () => {
+        const attemptDurations: number[] = [];
+        let attempts = 0;
+
+        const tree = Work.tree('tree').addSerial({
+          name: 'measuredAttempts',
+          execute: async () => {
+            const start = Date.now();
+            attempts++;
+            try {
+              // Attempt takes longer than attemptTimeout
+              await new Promise((r) => setTimeout(r, 100));
+              return 'should not return';
+            } finally {
+              attemptDurations.push(Date.now() - start);
+            }
+          },
+          retry: {
+            maxRetries: 2,
+            attemptTimeout: 30,
+          },
+          silenceError: true,
+        });
+
+        await tree.run({});
+
+        // Each attempt should have been cut short around 30ms
+        for (const duration of attemptDurations) {
+          expect(duration).toBeLessThan(50); // Allow some tolerance
+          expect(duration).toBeGreaterThanOrEqual(25);
+        }
+        expect(attempts).toBe(3);
+      });
+    });
+
+    describe('combined work timeout and attemptTimeout', () => {
+      it('should respect both work timeout and attemptTimeout', async () => {
+        let attempts = 0;
+
+        const tree = Work.tree('tree').addSerial({
+          name: 'combinedTimeout',
+          execute: async () => {
+            attempts++;
+            // Each attempt takes 40ms but attemptTimeout is 30ms
+            await new Promise((r) => setTimeout(r, 40));
+            return 'should not return';
+          },
+          timeout: 200, // Work timeout: 200ms total
+          retry: {
+            maxRetries: 10,
+            attemptTimeout: 30, // Attempt timeout: 30ms per attempt
+          },
+        });
+
+        const result = await tree.run({});
+
+        expect(result.status).toBe(WorkStatus.Failed);
+        // Work timeout (200ms) / attemptTimeout (30ms) ≈ 6-7 attempts possible
+        expect(attempts).toBeLessThanOrEqual(8);
+        expect(attempts).toBeGreaterThanOrEqual(5);
+      });
+
+      it('should fail with work timeout when attemptTimeout allows many retries', async () => {
+        let attempts = 0;
+
+        const tree = Work.tree('tree').addSerial({
+          name: 'workTimeoutFirst',
+          execute: async () => {
+            attempts++;
+            // Quick execution, but always fails
+            await new Promise((r) => setTimeout(r, 20));
+            throw new Error('Always fails');
+          },
+          timeout: 70, // Work timeout cuts off at 70ms
+          retry: {
+            maxRetries: 100, // Many retries allowed
+            attemptTimeout: 50, // attemptTimeout is generous
+          },
+        });
+
+        const result = await tree.run({});
+
+        expect(result.status).toBe(WorkStatus.Failed);
+        expect(result.error).toBeInstanceOf(TimeoutError);
+        expect(result.error?.message).toBe('Work "workTimeoutFirst" timed out after 70ms');
+        // ~3 attempts at 20ms each = 60ms, 4th attempt would exceed 70ms
+        expect(attempts).toBeLessThanOrEqual(4);
+      });
     });
   });
 
