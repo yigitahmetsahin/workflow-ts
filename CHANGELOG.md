@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This changelog is automatically managed by [Release Please](https://github.com/googleapis/release-please).
 
+## [7.1.0](https://github.com/yigitahmetsahin/work-tree/compare/v7.0.0...v7.1.0) (2026-01-31)
+
+
+### Features
+
+* add isSkipped() method to check if tree would be skipped ([9ce21d9](https://github.com/yigitahmetsahin/work-tree/commit/9ce21d99667b436b11742a27e8ce8c7bd9dcf592))
+
 ## [7.0.0](https://github.com/yigitahmetsahin/work-tree/compare/v6.6.0...v7.0.0) (2026-01-29)
 
 
